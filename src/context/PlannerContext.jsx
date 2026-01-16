@@ -49,7 +49,7 @@ export const EventProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(classColors)); }, [classColors]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.HIDDEN, JSON.stringify(hiddenClasses)); }, [hiddenClasses]);
 
-  // --- ICS Processing (FIXED) ---
+  // --- ICS Processing ---
   const processICSContent = useCallback((text) => {
     try {
       // FIX: Pass the raw string to unfoldLines, THEN split
@@ -119,9 +119,62 @@ export const EventProvider = ({ children }) => {
       if (type === 'ADD') return [...prev, payload];
       if (type === 'UPDATE') return prev.map(e => e.id === payload.id ? payload : e);
       if (type === 'DELETE') return prev.filter(e => e.id !== payload);
+      if (type === 'BULK') return payload; // Handle Bulk updates
       return prev;
     });
     syncAction(type, payload);
+  };
+
+  // --- NEW: Data Helper Wrappers ---
+  // These are required by App.jsx but were missing
+  const addEvent = (event) => dispatchCalEvent('ADD', event);
+  const updateEvent = (event) => dispatchCalEvent('UPDATE', event);
+  const deleteEvent = (id) => dispatchCalEvent('DELETE', id);
+  
+  const resetAllData = () => {
+    dispatchCalEvent('BULK', []);
+    localStorage.removeItem(STORAGE_KEYS.EVENTS);
+  };
+
+  const importJsonData = (jsonString) => {
+    try {
+      const data = JSON.parse(jsonString);
+      if (Array.isArray(data)) {
+        dispatchCalEvent('BULK', data);
+        return { success: true };
+      }
+      return { success: false, error: "Invalid JSON format: Expected an array" };
+    } catch (e) {
+      console.error("JSON Import failed", e);
+      return { success: false, error: e.message };
+    }
+  };
+
+  const exportICS = () => {
+    const content = generateICS(events);
+    const blob = new Blob([content], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "planner.ics";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Helper placeholders for class management (connect these to state if needed)
+  const deleteClass = (className) => {
+    const newColors = { ...classColors };
+    delete newColors[className];
+    setClassColors(newColors);
+  };
+  
+  const mergeClasses = (source, target) => {
+    setEvents(prev => {
+      const updated = prev.map(e => e.class === source ? { ...e, class: target } : e);
+      dispatchCalEvent('BULK', updated); // Sync the massive change
+      return updated;
+    });
+    deleteClass(source);
   };
 
   return (
@@ -136,6 +189,15 @@ export const EventProvider = ({ children }) => {
         setHiddenClasses,
         processICSContent,
         openTaskModal,
+        // --- Add the missing exports here ---
+        addEvent,
+        updateEvent,
+        deleteEvent,
+        importJsonData,
+        exportICS,
+        resetAllData,
+        deleteClass,
+        mergeClasses,
         // Sync State
         user,
         roomId,

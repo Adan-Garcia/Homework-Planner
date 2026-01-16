@@ -82,7 +82,11 @@ export const usePlannerSync = (roomId, user, setEvents) => {
                
                // Apply delta to local state
                setEvents(prev => {
-                 if (action.type === 'ADD') return [...prev, action.payload];
+                 if (action.type === 'ADD') {
+                    // FIX: Check if event exists to prevent duplicates from history replay
+                    if (prev.some(e => e.id === action.payload.id)) return prev;
+                    return [...prev, action.payload];
+                 }
                  if (action.type === 'UPDATE') return prev.map(e => e.id === action.payload.id ? action.payload : e);
                  if (action.type === 'DELETE') return prev.filter(e => e.id !== action.payload);
                  if (action.type === 'BULK') return action.payload;
