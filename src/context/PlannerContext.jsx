@@ -9,6 +9,7 @@ import { STORAGE_KEYS, PALETTE } from "../utils/constants";
 import {
   unfoldLines,
   parseICSDate,
+  parseICSTime, // Import the new helper
   determineClass,
   determineType,
   generateICS,
@@ -76,7 +77,7 @@ export const EventProvider = ({ children }) => {
 
   // --- Logic: Import ICS ---
   const processICSContent = useCallback(
-    (text) => {
+    (text, shouldAppend = false) => {
       try {
         const unfolded = unfoldLines(text);
         const eventBlocks = unfolded.split("BEGIN:VEVENT");
@@ -112,13 +113,15 @@ export const EventProvider = ({ children }) => {
 
             if (summary.startsWith("END:VCALENDAR")) return null;
             const dateStr = parseICSDate(rawDate);
+            const timeStr = parseICSTime(rawDate); // Extract time
+
             if (!dateStr) return null;
 
             return {
               id: `evt-${Date.now()}-${index}`,
               title: summary,
               date: dateStr,
-              time: "",
+              time: timeStr, // Use extracted time
               class: determineClass(location, summary),
               type: determineType(summary, description),
               description: description || "",
@@ -130,13 +133,19 @@ export const EventProvider = ({ children }) => {
           .filter(Boolean);
 
         parsed.sort((a, b) => new Date(a.date) - new Date(b.date));
-        const newColors = generateColorsForNewClasses(
-          parsed.map((e) => e.class),
-          {},
-        );
-
-        setEvents(parsed);
-        setClassColors(newColors);
+        
+        // Update State
+        if (shouldAppend) {
+          setEvents((prev) => [...prev, ...parsed]);
+          setClassColors((prev) => 
+            generateColorsForNewClasses(parsed.map((e) => e.class), prev)
+          );
+        } else {
+          setEvents(parsed);
+          setClassColors((prev) => 
+            generateColorsForNewClasses(parsed.map((e) => e.class), {})
+          );
+        }
 
         return {
           success: true,
@@ -269,7 +278,7 @@ export const EventProvider = ({ children }) => {
     localStorage.clear();
   };
 
-  const importJsonData = (jsonText) => {
+  const importJsonData = (jsonText, shouldAppend = false) => {
     try {
       const cleanedJson = jsonText
         .replace(/\/\/.*$/gm, "")
@@ -287,13 +296,19 @@ export const EventProvider = ({ children }) => {
         description: e.description || "",
         date: e.date || new Date().toISOString().split("T")[0],
       }));
-      const newColors = generateColorsForNewClasses(
-        imported.map((e) => e.class),
-        classColors,
-      );
-      setEvents(imported);
-      setClassColors(newColors);
-      return { success: true };
+
+      if (shouldAppend) {
+        setEvents((prev) => [...prev, ...imported]);
+        setClassColors((prev) => 
+          generateColorsForNewClasses(imported.map((e) => e.class), prev)
+        );
+      } else {
+        setEvents(imported);
+        setClassColors((prev) => 
+          generateColorsForNewClasses(imported.map((e) => e.class), {})
+        );
+      }
+      return { success: true, count: imported.length };
     } catch (e) {
       return { success: false, error: e.message };
     }

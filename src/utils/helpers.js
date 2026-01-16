@@ -8,33 +8,157 @@ export const parseICSDate = (dateStr) => {
   return '';
 };
 
+// NEW: Helper to parse time from ICS date string (e.g., 20230101T143000)
+export const parseICSTime = (dateStr) => {
+  if (!dateStr || !dateStr.includes('T')) return '';
+  
+  // Remove trailing Z (UTC) if present to simplify, or handle timezone logic here if needed.
+  // Currently treating as floating/local time for simplicity.
+  const clean = dateStr.replace(/Z$/, ''); 
+  
+  const timePart = clean.split('T')[1];
+  if (!timePart) return '';
+
+  const match = /(\d{2})(\d{2})/.exec(timePart);
+  if (match) return `${match[1]}:${match[2]}`;
+  return '';
+};
+
 export const determineType = (summary, description) => {
+  // Combine and normalize text for case-insensitive matching
   const text = (summary + ' ' + description || '').toLowerCase();
-  if (text.includes('reading')) return 'Reading';
-  if (text.includes('exam') || text.includes('test') || text.includes('midterm') || text.includes('final')) return 'Exam';
-  if (text.includes('quiz')) return 'Quiz';
-  if (text.includes('homework') || text.includes('hw')) return 'Homework';
-  if (text.includes('project') || text.includes('lab')) return 'Project';
-  if (text.includes('discussion')) return 'Discussion';
-  return 'Assignment';
+
+  // 1. Discussions & Peer Reviews
+  if (text.includes('discussion') || text.includes('peer review')) {
+    return 'Discussion';
+  }
+
+  // 2. Office Hours & Reviews (Study sessions)
+  // Check this early to prevent "Exam Review" from becoming just "Exam"
+  if (
+    text.includes('office hours') || 
+    text.includes('review session') || 
+    text.includes('help session')
+  ) {
+    return 'Office Hours';
+  }
+
+  // 3. Quizzes
+  if (text.includes('quiz')) {
+    return 'Quiz';
+  }
+
+  // 4. Projects 
+  // Priorities "Project" over "Final" (e.g. "Final Project" is a Project, not an Exam)
+  if (
+    text.includes('project') || 
+    text.includes('milestone') || 
+    text.includes('deliverable') || 
+    text.includes('proposal')
+  ) {
+    return 'Project';
+  }
+
+  // 5. Exams
+  if (
+    text.includes('exam') || 
+    text.includes('test') || 
+    text.includes('midterm') || 
+    text.includes('final')
+  ) {
+    return 'Exam';
+  }
+
+  // 6. Homework & Assignments
+  // "Dropbox" and "Due" strongly imply an assignment submission
+  if (
+    text.includes('homework') || 
+    text.includes('hw') || 
+    text.includes('assignment') || 
+    text.includes('dropbox') || 
+    text.includes('problem set')
+  ) {
+    return 'Homework';
+  }
+
+  // 7. Labs & Studios
+  // "Studio" appeared frequently in your file as a class type
+  if (text.includes('lab') || text.includes('studio')) {
+    return 'Lab';
+  }
+
+  // 8. Readings
+  if (text.includes('reading')) {
+    return 'Reading';
+  }
+
+  // 9. Lectures & Class Sessions
+  // Captures class meetings that aren't exams or labs
+  if (
+    text.includes('lecture') || 
+    text.includes('recitation') || 
+    text.includes('seminar') || 
+    text.includes('orientation') ||
+    text.includes('class')
+  ) {
+    return 'Lecture';
+  }
+
+  // 10. Default catch-all
+  // Changed to 'Event' to cover generic calendar items better than 'Assignment'
+  return 'Event';
 };
 
 export const determineClass = (location, summary) => {
-  let candidate = location || summary || "";
-  const separators = [' - ', ' : ', ' | '];
-  
-  for (const sep of separators) {
-    if (candidate.includes(sep)) {
-      const parts = candidate.split(sep);
-      let name = parts[parts.length - 1].trim();
-      name = name.replace(/ - Due$/i, '')
-                 .replace(/Zoom Meeting/i, '')
-                 .replace(/Assignment/i, '')
-                 .trim();
-      if (!/^[\w\s]+$/.test(name) && name.length < 3) continue;
-      return name;
+  // Helper to validate if a string looks like a real class name
+  const isValidName = (name) => {
+    if (!name || name.length < 3) return false;
+    // Reject times like "8:00am" or "11:59 PM"
+    if (/\d/.test(name) && /am|pm/i.test(name)) return false; 
+    // Reject common status words if they end up as the "name"
+    if (/^(due|available|assignment|zoom meeting)$/i.test(name)) return false;
+    return true;
+  };
+
+  // Prioritize location because it usually contains the "Container" (Class Name)
+  // whereas summary contains the "Content" (Event Name like 'Exam 1')
+  const candidates = [location, summary];
+
+  for (let text of candidates) {
+    if (!text) continue;
+
+    // 1. Clean up "Zoom" clutter to reveal the course info inside
+    // Ex: "Zoom Online Meeting (MECE.102 - Mechanics)" -> "(MECE.102 - Mechanics)"
+    let clean = text.replace(/Zoom (Online )?Meeting/i, '').trim();
+
+    // 2. Unwrap parentheses if the whole remaining text is wrapped
+    // Ex: "(MECE.102 - Mechanics)" -> "MECE.102 - Mechanics"
+    if (clean.startsWith('(') && clean.endsWith(')')) {
+      clean = clean.slice(1, -1).trim();
+    }
+
+    // 3. Split by common separators. " - " is the most common in your file.
+    const separators = [' - ', ' : ', ' | '];
+    
+    for (const sep of separators) {
+      if (clean.includes(sep)) {
+        const parts = clean.split(sep);
+        // The Class Name is usually the LAST part (e.g. "CODE - NAME")
+        let name = parts[parts.length - 1].trim();
+
+        // 4. Final Cleanup: Remove trailing trash
+        name = name.replace(/\)$/, '')       // Remove trailing ')' from "Mechanics)"
+                   .replace(/ - Due$/i, '')  // Remove status
+                   .replace(/ - Available$/i, '') 
+                   .trim();
+
+        if (isValidName(name)) {
+          return name;
+        }
+      }
     }
   }
+
   return "General";
 };
 
