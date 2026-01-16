@@ -65,41 +65,37 @@ export default function App() {
 
   // --- Firebase Init ---
   useEffect(() => {
-    if (typeof __firebase_config === 'undefined') {
-        console.error("Firebase config is missing in the environment.");
-        return;
-    }
-    
+    // Check if API key exists to prevent errors if .env is missing
+    if (!import.meta.env.VITE_FIREBASE_API_KEY) return;
+
     try {
-        const firebaseConfig = JSON.parse(__firebase_config);
+        const firebaseConfig = {
+            apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+            authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+            projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+            storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+            messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+            appId: import.meta.env.VITE_FIREBASE_APP_ID
+        };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        // Use the App ID from env or fallback
+        const appId = import.meta.env.VITE_FIREBASE_APP_ID || 'default-app-id';
 
-        // 1. Setup Listener FIRST to capture auth state reliably
-        const unsubscribe = onAuthStateChanged(auth, (u) => {
-            console.log("Firebase Auth State Changed:", u ? `Signed in as ${u.uid}` : "Signed out");
-            setFirebaseState({ db, user: u, appId });
-        });
-
-        // 2. Trigger Auth
         const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (err) {
-                console.error("Firebase Auth Failed:", err);
-            }
+             await signInAnonymously(auth);
         };
         initAuth();
         
+        const unsubscribe = onAuthStateChanged(auth, (u) => {
+            setFirebaseState({ db, user: u, appId });
+        });
         return () => unsubscribe();
     } catch (e) {
-        console.error("Firebase Init Error:", e);
+        console.error("Firebase init failed", e);
     }
   }, []);
 
