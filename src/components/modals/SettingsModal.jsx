@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Merge, ArrowRightLeft, Trash2, LogOut, Save, Download, RefreshCw, Copy, Check, Info, Link2, Unplug } from 'lucide-react';
+import { Merge, ArrowRightLeft, Trash2, LogOut, Save, Download, RefreshCw, Copy, Check, Info, Link2, Unplug, Lock, Key } from 'lucide-react';
 import Modal from '../ui/Modal';
 
 const SettingsModal = ({
@@ -13,9 +13,9 @@ const SettingsModal = ({
   handleJsonSave, handleICSExport,
   // Sync
   roomCode, setRoomCode,
-  syncStatus, connectToRoom, disconnectFromRoom
+  syncStatus, handleSyncConnect, disconnectFromRoom, errorMsg
 }) => {
-  const [copied, setCopied] = useState(false);
+  const [roomPassword, setRoomPassword] = useState('');
 
   return (
     <>
@@ -29,28 +29,57 @@ const SettingsModal = ({
                  Sync (Mesh Mode)
              </h4>
              
-             {syncStatus === 'disconnected' || syncStatus === 'error' ? (
+             {syncStatus === 'disconnected' || syncStatus === 'error' || syncStatus === 'connecting' ? (
                 <div className="space-y-3">
                    <p className="text-xs text-slate-600 dark:text-slate-400 mb-3 leading-relaxed">
-                      Enter a persistent <strong>Room Name</strong> (e.g. "MyStudyGroup" or "AdanPlanner"). 
-                      Any device with this name will auto-connect and sync the latest data.
+                      Enter a <strong>Room Name</strong> and optional <strong>Password</strong>. 
+                      If the room exists, you will join it. If not, it will be created.
                    </p>
-                   <div className="flex gap-2">
-                      <input 
-                        value={roomCode}
-                        onChange={(e) => setRoomCode(e.target.value)}
-                        placeholder="Enter Room Name..."
-                        className="flex-1 p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <button 
-                        onClick={connectToRoom} 
-                        disabled={!roomCode}
-                        className="px-4 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
-                      >
-                         <Link2 className="w-4 h-4" /> Connect
-                      </button>
-                   </div>
-                   {syncStatus === 'error' && <p className="text-xs text-red-500">Connection failed. Check database rules.</p>}
+                   {/* FORM WRAPPER FIX */}
+                   <form 
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSyncConnect(roomCode, roomPassword);
+                        }} 
+                        className="flex flex-col gap-2"
+                   >
+                      <div className="flex gap-2">
+                         <div className="flex-1 relative">
+                             <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                             <input 
+                                value={roomCode}
+                                onChange={(e) => setRoomCode(e.target.value)}
+                                placeholder="Room Name..."
+                                name="roomName"
+                                autoComplete="off"
+                                className="w-full pl-9 p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                             />
+                         </div>
+                      </div>
+                      <div className="flex gap-2">
+                         <div className="flex-1 relative">
+                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                             <input 
+                                type="password"
+                                value={roomPassword}
+                                onChange={(e) => setRoomPassword(e.target.value)}
+                                placeholder="Room Password (Optional)..."
+                                name="roomPassword"
+                                autoComplete="new-password"
+                                className="w-full pl-9 p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                             />
+                         </div>
+                         <button 
+                            type="submit"
+                            disabled={!roomCode || syncStatus === 'connecting'}
+                            className="px-4 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2 shrink-0"
+                         >
+                             {syncStatus === 'connecting' ? '...' : 'Connect'}
+                         </button>
+                      </div>
+                   </form>
+
+                   {errorMsg && <p className="text-xs text-red-500 font-bold">{errorMsg}</p>}
                 </div>
              ) : (
                 <div className="text-center space-y-4">
@@ -102,7 +131,6 @@ const SettingsModal = ({
         </div>
       </Modal>
 
-      {/* JSON Edit Modal */}
       <Modal isOpen={showJsonEdit} onClose={() => setShowJsonEdit(false)} title="Raw Data Editor">
         <div className="flex flex-col h-full">
           <textarea value={jsonEditText} onChange={(e) => setJsonEditText(e.target.value)} className="flex-1 w-full p-4 text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl outline-none resize-none dark:text-slate-200" />
