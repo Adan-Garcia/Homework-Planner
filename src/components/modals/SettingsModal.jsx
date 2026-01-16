@@ -303,6 +303,7 @@ const DateCleanerContent = ({ onCloseModal }) => {
 // Sub-Component: Class Manager
 // ==========================================
 const ClassManager = ({ classColors, setClassColors, onDeleteClass }) => {
+
   return (
     <section>
       <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 px-1">
@@ -418,6 +419,7 @@ const SettingsModal = ({
 }) => {
   const { events } = useEvents();
 
+  
   useEffect(() => {
     if (showJsonEdit) {
       setJsonEditText(JSON.stringify(events, null, 2));

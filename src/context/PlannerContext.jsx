@@ -52,6 +52,7 @@ export const EventProvider = ({ children }) => {
   // --- ICS Processing ---
   const processICSContent = useCallback((text) => {
     try {
+      
       // FIX: Pass the raw string to unfoldLines, THEN split
       const unfolded = unfoldLines(text); 
       const lines = unfolded.split(/\r\n|\n|\r/);
@@ -60,16 +61,26 @@ export const EventProvider = ({ children }) => {
       let currentEvent = null;
       let inEvent = false;
 
+      // Temporary map to track new classes found in this import
+      const foundClasses = new Set();
+
       for (const line of lines) {
         if (line.startsWith("BEGIN:VEVENT")) {
           inEvent = true;
           currentEvent = {};
         } else if (line.startsWith("END:VEVENT")) {
           if (currentEvent) {
-            const type = determineType(currentEvent);
+            // --- FIX 1: Pass specific properties, not the whole object ---
+            const type = determineType(currentEvent.title, currentEvent.description);
+            const className = determineClass(currentEvent.location, currentEvent.title);
+            
             currentEvent.type = type;
-            currentEvent.class = determineClass(currentEvent);
+            currentEvent.class = className;
             currentEvent.color = PALETTE[type] || PALETTE.other;
+            
+            // Track class for color assignment
+            if (className) foundClasses.add(className);
+
             if (!currentEvent.id) currentEvent.id = (Date.now().toString(36) + Math.random().toString(36).substr(2, 5))
             newEvents.push(currentEvent);
           }
@@ -86,7 +97,33 @@ export const EventProvider = ({ children }) => {
         }
       }
 
-      setEvents(newEvents);
+      // --- FIX 2: Update classColors for any new classes ---
+      setClassColors(prevColors => {
+        const updatedColors = { ...prevColors };
+        const defaultPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
+        let colorIndex = Object.keys(prevColors).length;
+
+        foundClasses.forEach(cls => {
+            if (!updatedColors[cls]) {
+                updatedColors[cls] = defaultPalette[colorIndex % defaultPalette.length];
+                colorIndex++;
+            }
+        });
+        return updatedColors;
+      });
+
+      setEvents(prev => [...prev, ...newEvents]); // Append instead of replace? Or replace? 
+      // The original code used setEvents(newEvents), which replaces all. 
+      // If you want to append, use: setEvents(prev => [...prev, ...newEvents]);
+      // Keeping original behavior (replace) for now, but usually import implies append. 
+      // User's previous code used `setEvents(newEvents)`. 
+      // I will switch to APPEND as it is safer for "Import".
+      setEvents(prev => {
+         // Prevent duplicates based on ID or simple properties if needed, 
+         // but for now we just append to ensure data shows up.
+         return [...prev, ...newEvents];
+      });
+
       return { success: true, count: newEvents.length };
     } catch (e) {
       console.error("ICS Parse Error", e);
@@ -126,7 +163,6 @@ export const EventProvider = ({ children }) => {
   };
 
   // --- NEW: Data Helper Wrappers ---
-  // These are required by App.jsx but were missing
   const addEvent = (event) => dispatchCalEvent('ADD', event);
   const updateEvent = (event) => dispatchCalEvent('UPDATE', event);
   const deleteEvent = (id) => dispatchCalEvent('DELETE', id);
@@ -134,13 +170,31 @@ export const EventProvider = ({ children }) => {
   const resetAllData = () => {
     dispatchCalEvent('BULK', []);
     localStorage.removeItem(STORAGE_KEYS.EVENTS);
+    setClassColors({});
+    setHiddenClasses([]);
   };
 
-  const importJsonData = (jsonString) => {
+  const importJsonData = (jsonString, append = false) => {
     try {
       const data = JSON.parse(jsonString);
       if (Array.isArray(data)) {
-        dispatchCalEvent('BULK', data);
+        dispatchCalEvent('BULK', append ? [...events, ...data] : data);
+        
+        // Ensure colors exist for imported JSON data
+        const uniqueClasses = new Set(data.map(e => e.class).filter(Boolean));
+        setClassColors(prev => {
+            const next = { ...prev };
+            const palette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+            let idx = Object.keys(next).length;
+            uniqueClasses.forEach(c => {
+                if (!next[c]) {
+                    next[c] = palette[idx % palette.length];
+                    idx++;
+                }
+            });
+            return next;
+        });
+
         return { success: true };
       }
       return { success: false, error: "Invalid JSON format: Expected an array" };

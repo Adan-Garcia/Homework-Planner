@@ -23,6 +23,7 @@ const Sidebar = ({
   setShowCompleted
 }) => {
 
+  
   const groupedTasks = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);

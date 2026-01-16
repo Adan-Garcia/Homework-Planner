@@ -28,7 +28,7 @@ const LinkifiedText = ({ text }) => {
   );
 };
 
-const CalendarView = () => {
+const CalendarView = ({ filteredEvents: propFilteredEvents }) => {
   const { events, classColors, updateEvent, hiddenClasses } = useEvents();
   const { 
     currentDate, setCurrentDate, 
@@ -39,7 +39,11 @@ const CalendarView = () => {
 
   const [draggedEventId, setDraggedEventId] = useState(null);
 
-  const filteredEvents = useMemo(() => {
+  // FIX: Use prop from App.jsx if available, otherwise fallback to internal logic
+  const activeEvents = useMemo(() => {
+    
+    if (propFilteredEvents) return propFilteredEvents;
+    
     return events.filter(e => {
         if (hiddenClasses.includes(e.class)) return false;
         if (activeTypeFilter !== 'All' && e.type !== activeTypeFilter) return false;
@@ -50,7 +54,7 @@ const CalendarView = () => {
         }
         return true;
     });
-  }, [events, hiddenClasses, activeTypeFilter, searchQuery, showCompleted]);
+  }, [propFilteredEvents, events, hiddenClasses, activeTypeFilter, searchQuery, showCompleted]);
 
   const handleDragStart = (e, id) => {
     e.dataTransfer.setData("text/plain", id);
@@ -101,12 +105,12 @@ const CalendarView = () => {
 
   const eventsByDate = useMemo(() => {
     const map = {};
-    for (const ev of filteredEvents) {
+    for (const ev of activeEvents) {
         if (!map[ev.date]) map[ev.date] = [];
         map[ev.date].push(ev);
     }
     return map;
-  }, [filteredEvents]);
+  }, [activeEvents]);
 
   const calendarCells = useMemo(() => {
       const rawData = getCalendarData();
@@ -134,6 +138,9 @@ const CalendarView = () => {
      return {}; 
   };
 
+  // Helper to safely get color
+  const getColor = (cls) => classColors[cls] || '#cbd5e1'; // fallback to slate-300
+
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-slate-50/30 dark:bg-slate-900/30">
       
@@ -152,11 +159,11 @@ const CalendarView = () => {
         
         {calendarView === 'agenda' ? (
             <div className="h-full overflow-y-auto custom-scrollbar bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 space-y-8">
-                 {filteredEvents.length === 0 ? (
+                 {activeEvents.length === 0 ? (
                      <div className="text-center text-slate-400 py-20">No tasks found for this period.</div>
                  ) : (
                      Object.entries(
-                        filteredEvents.reduce((acc, ev) => {
+                        activeEvents.reduce((acc, ev) => {
                             const d = ev.date;
                             if (!acc[d]) acc[d] = [];
                             acc[d].push(ev);
@@ -174,7 +181,7 @@ const CalendarView = () => {
                                          <div className="flex items-start justify-between">
                                              <div className="flex-1">
                                                  <div className="flex items-center gap-2 mb-1">
-                                                     <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: classColors[task.class] }}>{task.class}</span>
+                                                     <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: getColor(task.class) }}>{task.class}</span>
                                                      {task.priority === 'High' && <span className="text-[10px] font-bold text-red-500 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-full flex items-center gap-1"><Flag className="w-3 h-3 fill-current" /> High</span>}
                                                      <span className="text-xs text-slate-500 dark:text-slate-400">{task.type}</span>
                                                  </div>
@@ -231,25 +238,28 @@ const CalendarView = () => {
                     </div>
                     
                     <div className="flex-1 flex flex-col gap-1 overflow-hidden">
-                        {visibleEvents.map(ev => (
-                        <div 
-                            key={ev.id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, ev.id)}
-                            onClick={() => openTaskModal(ev)}
-                            className={`px-2 py-1.5 rounded-md text-[10px] font-semibold truncate cursor-pointer transition-all hover:scale-[1.02] active:scale-95 shadow-sm border border-transparent ${ev.completed ? 'opacity-40 grayscale line-through' : ''} ${draggedEventId === ev.id ? 'opacity-50' : ''}`}
-                            style={{ 
-                            backgroundColor: `${classColors[ev.class]}15`,
-                            color: classColors[ev.class],
-                            borderLeft: `3px solid ${classColors[ev.class]}`,
-                            ...getPriorityStyle(ev.priority)
-                            }}
-                            title={`${ev.title}`}
-                        >
-                            {ev.time && <span className="opacity-75 mr-1">{ev.time}</span>}
-                            {ev.title}
-                        </div>
-                        ))}
+                        {visibleEvents.map(ev => {
+                            const cColor = getColor(ev.class);
+                            return (
+                                <div 
+                                    key={ev.id}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, ev.id)}
+                                    onClick={() => openTaskModal(ev)}
+                                    className={`px-2 py-1.5 rounded-md text-[10px] font-semibold truncate cursor-pointer transition-all hover:scale-[1.02] active:scale-95 shadow-sm border border-transparent ${ev.completed ? 'opacity-40 grayscale line-through' : ''} ${draggedEventId === ev.id ? 'opacity-50' : ''}`}
+                                    style={{ 
+                                    backgroundColor: `${cColor}15`,
+                                    color: cColor,
+                                    borderLeft: `3px solid ${cColor}`,
+                                    ...getPriorityStyle(ev.priority)
+                                    }}
+                                    title={`${ev.title}`}
+                                >
+                                    {ev.time && <span className="opacity-75 mr-1">{ev.time}</span>}
+                                    {ev.title}
+                                </div>
+                            );
+                        })}
                         {hiddenCount > 0 && (
                             <button 
                                 onClick={() => { setCurrentDate(new Date(cell.dateStr + 'T00:00:00')); setCalendarView('day'); }}
