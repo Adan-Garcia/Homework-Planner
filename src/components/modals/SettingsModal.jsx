@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Merge, ArrowRightLeft, Trash2, LogOut, Save, Download, RefreshCw, Copy, Check, Info, Link2, Unplug, Lock, Key } from 'lucide-react';
+import React from 'react';
+import { Merge, ArrowRightLeft, Trash2, LogOut, Save, Download } from 'lucide-react';
 import Modal from '../ui/Modal';
 
 const SettingsModal = ({
@@ -10,98 +10,13 @@ const SettingsModal = ({
   mergeClasses, deleteClass, resetAllData,
   showJsonEdit, setShowJsonEdit,
   jsonEditText, setJsonEditText,
-  handleJsonSave, handleICSExport,
-  // Sync
-  roomCode, setRoomCode,
-  syncStatus, handleSyncConnect, disconnectFromRoom, errorMsg
+  handleJsonSave, handleICSExport
 }) => {
-  const [roomPassword, setRoomPassword] = useState('');
-
   return (
     <>
       <Modal isOpen={isOpen} onClose={onClose} title="Data Management">
         <div className="space-y-8">
           
-          {/* SYNC SECTION */}
-          <section className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-xl border border-blue-100 dark:border-blue-800">
-             <h4 className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-4 flex items-center gap-2">
-                 <RefreshCw className={`w-4 h-4 ${syncStatus === 'connecting' ? 'animate-spin' : ''}`} /> 
-                 Sync (Mesh Mode)
-             </h4>
-             
-             {syncStatus === 'disconnected' || syncStatus === 'error' || syncStatus === 'connecting' ? (
-                <div className="space-y-3">
-                   <p className="text-xs text-slate-600 dark:text-slate-400 mb-3 leading-relaxed">
-                      Enter a <strong>Room Name</strong> and optional <strong>Password</strong>. 
-                      If the room exists, you will join it. If not, it will be created.
-                   </p>
-                   {/* FORM WRAPPER FIX */}
-                   <form 
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            handleSyncConnect(roomCode, roomPassword);
-                        }} 
-                        className="flex flex-col gap-2"
-                   >
-                      <div className="flex gap-2">
-                         <div className="flex-1 relative">
-                             <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                             <input 
-                                value={roomCode}
-                                onChange={(e) => setRoomCode(e.target.value)}
-                                placeholder="Room Name..."
-                                name="roomName"
-                                autoComplete="off"
-                                className="w-full pl-9 p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-                             />
-                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                         <div className="flex-1 relative">
-                             <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                             <input 
-                                type="password"
-                                value={roomPassword}
-                                onChange={(e) => setRoomPassword(e.target.value)}
-                                placeholder="Room Password (Optional)..."
-                                name="roomPassword"
-                                autoComplete="new-password"
-                                className="w-full pl-9 p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-                             />
-                         </div>
-                         <button 
-                            type="submit"
-                            disabled={!roomCode || syncStatus === 'connecting'}
-                            className="px-4 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2 shrink-0"
-                         >
-                             {syncStatus === 'connecting' ? '...' : 'Connect'}
-                         </button>
-                      </div>
-                   </form>
-
-                   {errorMsg && <p className="text-xs text-red-500 font-bold">{errorMsg}</p>}
-                </div>
-             ) : (
-                <div className="text-center space-y-4">
-                    <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm">
-                        <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs text-slate-500 uppercase font-bold">Room Name</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${syncStatus === 'connected' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {syncStatus === 'connected' ? 'Active' : 'Connecting...'}
-                            </span>
-                        </div>
-                        <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{roomCode}</div>
-                        <p className="text-[10px] text-slate-400 mt-2 flex items-center justify-center gap-1">
-                            <Info className="w-3 h-3" /> Data automatically syncs to the newest version.
-                        </p>
-                    </div>
-                    <button onClick={disconnectFromRoom} className="text-xs text-red-500 hover:text-red-600 hover:underline flex items-center justify-center gap-1 w-full">
-                        <Unplug className="w-3 h-3" /> Disconnect
-                    </button>
-                </div>
-             )}
-          </section>
-
           <section className="bg-slate-50 dark:bg-slate-700/30 p-5 rounded-xl border border-slate-100 dark:border-slate-600">
             <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2"><Merge className="w-4 h-4 text-purple-500" /> Merge Classes</h4>
             <div className="grid grid-cols-[1fr,auto,1fr] gap-3 items-center">

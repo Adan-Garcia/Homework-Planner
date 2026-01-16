@@ -122,13 +122,3 @@ export const generateICS = (events) => {
   icsLines.push('END:VCALENDAR');
   return icsLines.join('\r\n');
 };
-
-export const generateSyncCode = () => {
-    // Generate a random 6-character code (A-Z, 0-9)
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed similar looking chars (I, 1, O, 0)
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-};

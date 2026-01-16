@@ -9,18 +9,7 @@ import {
   Columns,
   Rows,
   AlignLeft,
-  Wifi,
-  WifiOff,
-  AlertCircle,
 } from "lucide-react";
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
-import {
-  initializeFirestore,
-  memoryLocalCache,
-  getFirestore,
-} from "firebase/firestore";
-import { usePlannerSync } from "./hooks/usePlannerSync";
 import {
   useEvents,
   useUI,
@@ -77,15 +66,6 @@ function PlannerApp() {
     openTaskModal,
   } = useUI();
 
-  // --- Firebase & Sync ---
-  const [firebaseState, setFirebaseState] = useState({
-    db: null,
-    user: null,
-    appId: null,
-  });
-  const [roomCode, setRoomCode] = useState(
-    () => localStorage.getItem("hw_sync_room") || "",
-  );
   const [jsonEditText, setJsonEditText] = useState("");
   const [draggedEventId, setDraggedEventId] = useState(null);
   const [mergeSource, setMergeSource] = useState("");
@@ -99,91 +79,6 @@ function PlannerApp() {
     onConfirm: () => {},
     isDanger: false,
   });
-
-  const {
-    syncStatus,
-    createSyncSession,
-    joinSyncSession,
-    leaveSyncSession,
-    errorMsg,
-  } = usePlannerSync(firebaseState, eventsContext);
-
-  useEffect(() => {
-    if (!import.meta.env.VITE_FIREBASE_API_KEY) return;
-    try {
-      const firebaseConfig = {
-        apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-        authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-        projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-        storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-        appId: import.meta.env.VITE_FIREBASE_APP_ID,
-      };
-
-      // 1. Initialize or Get App
-      const app =
-        getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-      const auth = getAuth(app);
-
-      // 2. Initialize or Get Firestore
-      // We wrap this in try/catch because initializeFirestore throws if called again
-      let db;
-      try {
-        db = initializeFirestore(app, { localCache: memoryLocalCache() });
-      } catch (e) {
-        // Fallback: If already initialized, just get the instance
-        db = getFirestore(app);
-      }
-
-      const appId = import.meta.env.VITE_FIREBASE_APP_ID || "default-app-id";
-
-      const unsubscribe = onAuthStateChanged(auth, (u) => {
-        if (u) {
-          setFirebaseState({ db, user: u, appId });
-        } else {
-          signInAnonymously(auth).catch(console.error);
-        }
-      });
-      return () => unsubscribe();
-    } catch (e) {
-      console.error("Firebase init failed", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("hw_sync_room", roomCode);
-  }, [roomCode]);
-
-  // --- Logic: Connect / Create ---
-  const handleSyncConnect = async (code, password) => {
-    if (!firebaseState.user) {
-      // Fallback UI notification instead of alert
-      return;
-    }
-    try {
-      await joinSyncSession(code, password);
-    } catch (err) {
-      if (
-        err.message === "Room not found" ||
-        err.message === "Room is inactive"
-      ) {
-        const confirmMsg =
-          err.message === "Room not found"
-            ? `Room "${code}" doesn't exist. Create it?`
-            : `Room "${code}" exists but seems inactive (no Host). Take over as Host?`;
-
-        setConfirmModal({
-          isOpen: true,
-          title: "Create Room?",
-          message: confirmMsg,
-          onConfirm: () => createSyncSession(code, password),
-          isDanger: false,
-        });
-      } else {
-        // Let UI display errorMsg from hook
-      }
-    }
-  };
 
   const handleDragStart = (e, id) => {
     e.dataTransfer.setData("text/plain", id);
@@ -268,13 +163,6 @@ function PlannerApp() {
         setJsonEditText={setJsonEditText}
         handleJsonSave={handleJsonSave}
         handleICSExport={exportICS}
-        // Sync
-        roomCode={roomCode}
-        setRoomCode={setRoomCode}
-        syncStatus={syncStatus}
-        handleSyncConnect={handleSyncConnect}
-        disconnectFromRoom={leaveSyncSession}
-        errorMsg={errorMsg}
       />
       <TaskModal
         isOpen={modals.task}
@@ -354,26 +242,6 @@ function PlannerApp() {
           <h1 className="font-bold text-lg hidden md:block">
             Homework Planner
           </h1>
-          {syncStatus !== "disconnected" && (
-            <div
-              className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border animate-in fade-in ${syncStatus === "connected" || syncStatus === "active" ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800" : syncStatus === "error" ? "bg-red-50 text-red-600 border-red-200" : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"}`}
-            >
-              {syncStatus === "connected" || syncStatus === "active" ? (
-                <Wifi className="w-3 h-3" />
-              ) : syncStatus === "error" ? (
-                <AlertCircle className="w-3 h-3" />
-              ) : (
-                <WifiOff className="w-3 h-3" />
-              )}
-              <span className="uppercase">
-                {syncStatus === "connected" || syncStatus === "active"
-                  ? "Synced"
-                  : syncStatus === "error"
-                    ? "Error"
-                    : "Connecting..."}
-              </span>
-            </div>
-          )}
         </div>
         <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
           {[
@@ -415,11 +283,6 @@ function PlannerApp() {
             className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative"
           >
             <Settings className="w-4 h-4" />
-            {syncStatus !== "disconnected" && (
-              <span
-                className={`absolute top-2 right-2 w-2 h-2 rounded-full border border-white ${syncStatus === "connected" || syncStatus === "active" ? "bg-green-500" : syncStatus === "error" ? "bg-red-500" : "bg-amber-500"}`}
-              ></span>
-            )}
           </button>
         </div>
       </header>
