@@ -1,40 +1,21 @@
 import React, { useState } from 'react';
-import { Merge, ArrowRightLeft, Trash2, LogOut, Save, Download, RefreshCw, Copy, Check, Info } from 'lucide-react';
+import { Merge, ArrowRightLeft, Trash2, LogOut, Save, Download, RefreshCw, Copy, Check, Info, Link2, Unplug } from 'lucide-react';
 import Modal from '../ui/Modal';
 
 const SettingsModal = ({
-  isOpen,
-  onClose,
-  classColors,
-  setClassColors,
-  mergeSource,
-  setMergeSource,
-  mergeTarget,
-  setMergeTarget,
-  mergeClasses,
-  deleteClass,
-  resetAllData,
-  showJsonEdit,
-  setShowJsonEdit,
-  jsonEditText,
-  setJsonEditText,
-  handleJsonSave,
-  handleICSExport,
+  isOpen, onClose,
+  classColors, setClassColors,
+  mergeSource, setMergeSource,
+  mergeTarget, setMergeTarget,
+  mergeClasses, deleteClass, resetAllData,
+  showJsonEdit, setShowJsonEdit,
+  jsonEditText, setJsonEditText,
+  handleJsonSave, handleICSExport,
   // Sync
-  syncCode,
-  syncStatus,
-  createSyncSession,
-  joinSyncSession,
-  leaveSyncSession
+  roomCode, setRoomCode,
+  syncStatus, connectToRoom, disconnectFromRoom
 }) => {
-  const [joinCodeInput, setJoinCodeInput] = useState('');
   const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(syncCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
     <>
@@ -43,45 +24,51 @@ const SettingsModal = ({
           
           {/* SYNC SECTION */}
           <section className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-xl border border-blue-100 dark:border-blue-800">
-             <h4 className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-4 flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Peer-to-Peer Sync (WebRTC)</h4>
+             <h4 className="text-sm font-bold text-blue-700 dark:text-blue-300 mb-4 flex items-center gap-2">
+                 <RefreshCw className={`w-4 h-4 ${syncStatus === 'connecting' ? 'animate-spin' : ''}`} /> 
+                 Sync (Mesh Mode)
+             </h4>
              
-             {!syncCode ? (
+             {syncStatus === 'disconnected' || syncStatus === 'error' ? (
                 <div className="space-y-3">
                    <p className="text-xs text-slate-600 dark:text-slate-400 mb-3 leading-relaxed">
-                      Connect devices directly. Data is sent straight between devices and <strong>never stored on the server</strong>. 
-                      <span className="block mt-1 italic opacity-80">Both devices must stay online to keep the connection.</span>
+                      Enter a persistent <strong>Room Name</strong> (e.g. "MyStudyGroup" or "AdanPlanner"). 
+                      Any device with this name will auto-connect and sync the latest data.
                    </p>
                    <div className="flex gap-2">
-                      <button onClick={createSyncSession} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm transition-colors">Start Session</button>
-                      <div className="flex-1 flex gap-2">
-                          <input 
-                            value={joinCodeInput}
-                            onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                            placeholder="CODE"
-                            className="w-full min-w-0 p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-600 uppercase font-mono bg-white dark:bg-slate-700 dark:text-white"
-                          />
-                          <button onClick={() => joinSyncSession(joinCodeInput)} disabled={joinCodeInput.length < 6} className="px-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50">Join</button>
-                      </div>
+                      <input 
+                        value={roomCode}
+                        onChange={(e) => setRoomCode(e.target.value)}
+                        placeholder="Enter Room Name..."
+                        className="flex-1 p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button 
+                        onClick={connectToRoom} 
+                        disabled={!roomCode}
+                        className="px-4 bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                         <Link2 className="w-4 h-4" /> Connect
+                      </button>
                    </div>
+                   {syncStatus === 'error' && <p className="text-xs text-red-500">Connection failed. Check database rules.</p>}
                 </div>
              ) : (
                 <div className="text-center space-y-4">
                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm">
                         <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs text-slate-500 uppercase font-bold">Session Code</span>
+                            <span className="text-xs text-slate-500 uppercase font-bold">Room Name</span>
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${syncStatus === 'connected' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {syncStatus === 'connected' ? 'Connected' : 'Waiting...'}
+                                {syncStatus === 'connected' ? 'Active' : 'Connecting...'}
                             </span>
                         </div>
-                        <div className="flex items-center justify-center gap-3">
-                            <span className="text-3xl font-mono font-bold text-blue-600 dark:text-blue-400 tracking-widest">{syncCode}</span>
-                            <button onClick={handleCopy} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
-                                {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-slate-400" />}
-                            </button>
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-2 flex items-center justify-center gap-1"><Info className="w-3 h-3" /> Do not close this tab while syncing.</p>
+                        <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{roomCode}</div>
+                        <p className="text-[10px] text-slate-400 mt-2 flex items-center justify-center gap-1">
+                            <Info className="w-3 h-3" /> Data automatically syncs to the newest version.
+                        </p>
                     </div>
-                    <button onClick={leaveSyncSession} className="text-xs text-red-500 hover:text-red-600 hover:underline">Disconnect & End Session</button>
+                    <button onClick={disconnectFromRoom} className="text-xs text-red-500 hover:text-red-600 hover:underline flex items-center justify-center gap-1 w-full">
+                        <Unplug className="w-3 h-3" /> Disconnect
+                    </button>
                 </div>
              )}
           </section>
@@ -115,7 +102,7 @@ const SettingsModal = ({
         </div>
       </Modal>
 
-      {/* JSON Edit Modal can be reused here if accessed from settings */}
+      {/* JSON Edit Modal */}
       <Modal isOpen={showJsonEdit} onClose={() => setShowJsonEdit(false)} title="Raw Data Editor">
         <div className="flex flex-col h-full">
           <textarea value={jsonEditText} onChange={(e) => setJsonEditText(e.target.value)} className="flex-1 w-full p-4 text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xl outline-none resize-none dark:text-slate-200" />

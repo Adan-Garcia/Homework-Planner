@@ -27,13 +27,41 @@ export const EventProvider = ({ children }) => {
   const [events, setEvents] = useState(() => loadState(STORAGE_KEYS.EVENTS, []));
   const [classColors, setClassColors] = useState(() => loadState(STORAGE_KEYS.COLORS, {}));
   const [hiddenClasses, setHiddenClasses] = useState(() => loadState(STORAGE_KEYS.HIDDEN, []));
+  
+  // NEW: Change Log for robust sync (Change-based instead of State-based)
+  // Stores array of { id: string, op: string, val: any, ts: number }
+  const [changeLog, setChangeLog] = useState(() => loadState('hw_change_log', []));
+  
+  // Keep lastModified for heartbeat/connection checks
+  const [lastModified, setLastModified] = useState(() => loadState('hw_last_modified', Date.now()));
 
   // Persistence
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events)); }, [events]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(classColors)); }, [classColors]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.HIDDEN, JSON.stringify(hiddenClasses)); }, [hiddenClasses]);
+  useEffect(() => { localStorage.setItem('hw_last_modified', JSON.stringify(lastModified)); }, [lastModified]);
+  // Persist Change Log
+  useEffect(() => { localStorage.setItem('hw_change_log', JSON.stringify(changeLog)); }, [changeLog]);
 
-  // Logic: Color Generation
+  // --- Change Log Helper ---
+  // Records an action so peers can replay it instead of overwriting state
+  const logChange = useCallback((op, val) => {
+    const change = {
+      id: Math.random().toString(36).substr(2, 9) + Date.now().toString(36), // Unique ID
+      ts: Date.now(),
+      op,  // 'ADD', 'UPDATE', 'DELETE', 'MERGE_CLASS', 'DELETE_CLASS'
+      val  // The data needed to perform the op
+    };
+    
+    setChangeLog(prev => {
+      // Keep last 100 changes to keep payload light but allow recovery
+      const newLog = [...prev, change];
+      return newLog.slice(-100); 
+    });
+    setLastModified(Date.now());
+  }, []);
+
+  // --- Logic: Color Generation ---
   const generateColorsForNewClasses = useCallback((classList, existingColors) => {
     const uniqueClasses = [...new Set(classList)];
     const newColors = { ...existingColors };
@@ -47,7 +75,7 @@ export const EventProvider = ({ children }) => {
     return newColors;
   }, []);
 
-  // Logic: Import ICS
+  // --- Logic: Import ICS ---
   const processICSContent = useCallback((text) => {
     try {
       const unfolded = unfoldLines(text);
@@ -88,24 +116,35 @@ export const EventProvider = ({ children }) => {
       parsed.sort((a, b) => new Date(a.date) - new Date(b.date));
       const newColors = generateColorsForNewClasses(parsed.map(e => e.class), {});
 
+      // For bulk import, we just reset and log a "bulk" event or individual add events?
+      // Individual allows better syncing.
       setEvents(parsed);
       setClassColors(newColors);
+      
+      // Log a special bulk op or just touch data. 
+      // For massive imports, log might overflow, so we might rely on snapshot sync fallback if needed.
+      // But let's log the clear/reset for safety.
+      logChange('BULK_IMPORT', { count: parsed.length }); 
+      
       return { success: true, count: parsed.length, firstDate: parsed.length > 0 ? parsed[0].date : null };
     } catch (err) {
       console.error(err);
       return { success: false, error: 'Failed to parse iCal data.' };
     }
-  }, [generateColorsForNewClasses]);
+  }, [generateColorsForNewClasses, logChange]);
 
-  // Logic: CRUD
+  // --- CRUD Operations (Updated to Log Changes) ---
+  
   const addEvent = (newEvent) => {
     setEvents(prev => [...prev, newEvent]);
     if (!classColors[newEvent.class]) {
         setClassColors(prev => generateColorsForNewClasses([newEvent.class], prev));
     }
+    logChange('ADD', newEvent);
   };
 
   const updateEvent = (updatedEvent, scope = 'single') => {
+      // Optimistic Update
       if (scope === 'series' && updatedEvent.groupId) {
         setEvents(prev => prev.map(ev => {
             if (ev.groupId === updatedEvent.groupId) {
@@ -113,38 +152,54 @@ export const EventProvider = ({ children }) => {
             }
             return ev;
         }));
+        logChange('UPDATE_SERIES', updatedEvent);
       } else {
         setEvents(prev => prev.map(ev => ev.id === updatedEvent.id ? updatedEvent : ev));
+        logChange('UPDATE', updatedEvent);
       }
+      
       if (!classColors[updatedEvent.class]) {
         setClassColors(prev => generateColorsForNewClasses([updatedEvent.class], prev));
     }
   };
 
   const toggleTaskCompletion = (id) => {
-    setEvents(prev => prev.map(e => e.id === id ? { ...e, completed: !e.completed } : e));
+    let targetEvent = null;
+    setEvents(prev => prev.map(e => {
+        if (e.id === id) {
+            targetEvent = { ...e, completed: !e.completed };
+            return targetEvent;
+        }
+        return e;
+    }));
+    if (targetEvent) logChange('UPDATE', targetEvent);
   };
 
-  const deleteEvent = (id) => setEvents(prev => prev.filter(e => e.id !== id));
+  const deleteEvent = (id) => {
+      setEvents(prev => prev.filter(e => e.id !== id));
+      logChange('DELETE', id);
+  };
 
   const deleteClass = (clsToDelete) => {
     setEvents(prev => prev.filter(e => e.class !== clsToDelete));
     setClassColors(prev => { const next = { ...prev }; delete next[clsToDelete]; return next; });
     setHiddenClasses(prev => prev.filter(c => c !== clsToDelete));
+    logChange('DELETE_CLASS', clsToDelete);
   };
 
   const deleteEventsBeforeDate = (dateStr) => {
      if (!dateStr) return;
      setEvents(prev => prev.filter(e => e.date >= dateStr));
+     logChange('DELETE_BEFORE', dateStr);
   };
 
   const removeDuplicates = () => {
+    // This is a local cleanup, we can treat it as a bulk update
     const seen = new Set();
     const uniqueEvents = [];
     let duplicatesCount = 0;
 
     events.forEach(ev => {
-        // Create a unique signature for the event
         const signature = `${ev.title}|${ev.date}|${ev.time}|${ev.class}|${ev.type}`.toLowerCase();
         if (seen.has(signature)) {
             duplicatesCount++;
@@ -156,6 +211,7 @@ export const EventProvider = ({ children }) => {
 
     if (duplicatesCount > 0) {
         setEvents(uniqueEvents);
+        logChange('BULK_CLEANUP', null);
         alert(`Removed ${duplicatesCount} duplicate events.`);
     } else {
         alert("No duplicate events found.");
@@ -167,13 +223,16 @@ export const EventProvider = ({ children }) => {
     setEvents(prev => prev.map(e => e.class === source ? { ...e, class: target } : e));
     setClassColors(prev => { const next = { ...prev }; delete next[source]; return next; });
     setHiddenClasses(prev => prev.filter(c => c !== source));
+    logChange('MERGE_CLASS', { source, target });
   };
 
   const resetAllData = () => {
     setEvents([]);
     setClassColors({});
     setHiddenClasses([]);
+    setChangeLog([]); // Reset log too
     localStorage.clear();
+    logChange('RESET', null);
   };
 
   const importJsonData = (jsonText) => {
@@ -195,6 +254,7 @@ export const EventProvider = ({ children }) => {
         const newColors = generateColorsForNewClasses(imported.map(e => e.class), classColors);
         setEvents(imported);
         setClassColors(newColors);
+        logChange('BULK_IMPORT', { count: imported.length });
         return { success: true };
       } catch (e) {
         return { success: false, error: e.message };
@@ -203,11 +263,87 @@ export const EventProvider = ({ children }) => {
 
   const exportICS = () => generateICS(events);
 
+  // --- SYNC LOGIC: Replay Log instead of Overwriting ---
+  // Replaces "bulkUpdateFromSync"
+  const syncWithRemote = (remoteData) => {
+      const { changeLog: remoteLog, classColors: remoteColors } = remoteData;
+      
+      // 1. Merge Colors (Simple Union / Last Write Wins per key)
+      if (remoteColors) {
+          setClassColors(prev => ({ ...prev, ...remoteColors }));
+      }
+
+      // 2. Process Change Log
+      if (remoteLog && Array.isArray(remoteLog)) {
+          // Identify changes we haven't applied yet
+          const localChangeIds = new Set(changeLog.map(c => c.id));
+          const newChanges = remoteLog.filter(c => !localChangeIds.has(c.id));
+
+          if (newChanges.length === 0) return; // Nothing new
+
+          console.log(`Applying ${newChanges.length} new changes from remote.`);
+          
+          // Sort by timestamp to apply in order
+          newChanges.sort((a, b) => a.ts - b.ts);
+
+          setEvents(currentEvents => {
+              let updated = [...currentEvents];
+
+              newChanges.forEach(change => {
+                  const { op, val } = change;
+                  
+                  if (op === 'ADD') {
+                      if (!updated.find(e => e.id === val.id)) {
+                          updated.push(val);
+                      }
+                  } 
+                  else if (op === 'UPDATE') {
+                      const idx = updated.findIndex(e => e.id === val.id);
+                      if (idx >= 0) {
+                          updated[idx] = val;
+                      } else {
+                          // Treat update as add if missing (eventual consistency)
+                          updated.push(val); 
+                      }
+                  } 
+                  else if (op === 'DELETE') {
+                      updated = updated.filter(e => e.id !== val);
+                  }
+                  else if (op === 'DELETE_CLASS') {
+                      updated = updated.filter(e => e.class !== val);
+                  }
+                  else if (op === 'MERGE_CLASS') {
+                      updated = updated.map(e => e.class === val.source ? { ...e, class: val.target } : e);
+                  }
+                  else if (op === 'BULK_IMPORT' || op === 'RESET') {
+                       // Complex to handle perfectly in log replay without sending full payload
+                       // But usually followed by specific adds or we accept we might need a snapshot sync
+                       // For now, ignore purely signal ops
+                  }
+              });
+
+              return updated;
+          });
+
+          // 3. Update Local Log with New Changes (so we don't re-process them)
+          setChangeLog(prev => {
+              const combined = [...prev, ...newChanges];
+              // Keep log size manageable
+              return combined.sort((a,b) => a.ts - b.ts).slice(-100);
+          });
+          
+          setLastModified(Date.now());
+      }
+  };
+
   return (
     <EventContext.Provider value={{
       events, setEvents,
       classColors, setClassColors,
       hiddenClasses, setHiddenClasses,
+      lastModified, setLastModified,
+      changeLog, // Export log for App.jsx to send
+      syncWithRemote, // New smart sync function
       processICSContent, addEvent, updateEvent, deleteEvent,
       toggleTaskCompletion, deleteClass, mergeClasses,
       resetAllData, importJsonData, exportICS,

@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
-  Calendar as CalendarIcon, Settings, Moon, Sun, Plus, LayoutGrid, Columns, Rows, AlignLeft, Wifi, WifiOff
+  Calendar as CalendarIcon, Settings, Moon, Sun, Plus, LayoutGrid, Columns, Rows, AlignLeft, RefreshCw, Wifi, WifiOff
 } from 'lucide-react';
 
 // Firebase
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 
 // Utils
-import { PALETTE } from './utils/constants';
-import { addDaysToDate } from './utils/helpers';
+import { STORAGE_KEYS, PALETTE } from './utils/constants';
+import { unfoldLines, parseICSDate, determineType, determineClass, addDaysToDate, generateICS } from './utils/helpers';
+// Context
+import { useEvents, useUI, EventProvider, UIProvider } from './context/PlannerContext';
 
 // Components
 import SetupScreen from './components/setup/SetupScreen';
@@ -19,55 +21,63 @@ import CalendarView from './components/planner/CalendarView';
 import SettingsModal from './components/modals/SettingsModal';
 import TaskModal from './components/modals/TaskModal';
 
-// Context & Hooks
-import { useEvents, useUI } from './context/PlannerContext';
-import { usePlannerSync } from './hooks/usePlannerSync';
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' } // Public Google STUN server
+  ]
+};
 
-export default function App() {
-  // --- Context Hooks ---
+// Internal Component containing the main app logic
+// We separate this so we can wrap it in Providers in the default export
+function PlannerApp() {
+  // --- Context Hooks (Must be called unconditionally) ---
   const { 
     events, setEvents, 
     classColors, setClassColors, 
-    hiddenClasses, setHiddenClasses, 
-    processICSContent, updateEvent, deleteEvent,
-    toggleTaskCompletion, deleteClass, mergeClasses,
-    resetAllData, importJsonData, exportICS
+    hiddenClasses, setHiddenClasses,
+    lastModified, bulkUpdateFromSync,
+    addEvent, updateEvent, deleteEvent, deleteClass, mergeClasses, resetAllData, exportICS,
+    importJsonData 
   } = useEvents();
 
   const {
     darkMode, setDarkMode,
     calendarView, setCalendarView,
     view, setView,
-    setCurrentDate,
+    currentDate, setCurrentDate,
     searchQuery, setSearchQuery,
     activeTypeFilter, setActiveTypeFilter,
     showCompleted, setShowCompleted,
     hideOverdue, setHideOverdue,
     modals, openModal, closeModal,
-    editingTask, openTaskModal
+    editingTask, setEditingTask, openTaskModal
   } = useUI();
 
   // --- Local State ---
+  const [roomCode, setRoomCode] = useState(() => localStorage.getItem('hw_sync_room') || '');
+  const [syncStatus, setSyncStatus] = useState('disconnected'); // disconnected, connecting, connected, error
   const [firebaseState, setFirebaseState] = useState({ db: null, user: null, appId: null });
+  
+  // Settings JSON State
+  const [jsonEditText, setJsonEditText] = useState('');
+
+  // WebRTC Refs
+  const pc = useRef(null);
+  const dc = useRef(null);
+  const heartbeatRef = useRef(null);
+  const isHost = useRef(false);
+  const processedCandidates = useRef(new Set());
+
+  // DnD State
   const [draggedEventId, setDraggedEventId] = useState(null);
-
-  // Setup Inputs
-  const [urlInput, setUrlInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  // Class Management Local Inputs
   const [mergeSource, setMergeSource] = useState('');
   const [mergeTarget, setMergeTarget] = useState('');
 
-  // JSON Editor Local State
-  const [jsonEditText, setJsonEditText] = useState('');
-
   // --- Firebase Init ---
   useEffect(() => {
-    // Check if API key exists to prevent errors if .env is missing
+    // Only init if API key is present
     if (!import.meta.env.VITE_FIREBASE_API_KEY) return;
-
+    
     try {
         const firebaseConfig = {
             apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -81,8 +91,6 @@ export default function App() {
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        
-        // Use the App ID from env or fallback
         const appId = import.meta.env.VITE_FIREBASE_APP_ID || 'default-app-id';
 
         const initAuth = async () => {
@@ -99,197 +107,239 @@ export default function App() {
     }
   }, []);
 
-  // --- Sync Hook ---
-  // We pass the firebase connection and the data we want to sync
-  const { 
-    syncCode, syncStatus, createSyncSession, joinSyncSession, leaveSyncSession 
-  } = usePlannerSync(
-    firebaseState, 
-    { events, classColors, hiddenClasses, setEvents, setClassColors, setHiddenClasses }
-  );
+  // --- Persistent Room Code ---
+  useEffect(() => {
+    localStorage.setItem('hw_sync_room', roomCode);
+  }, [roomCode]);
 
-  // --- Handlers ---
+  // --- WebRTC / Mesh Logic ---
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const result = processICSContent(text);
-      if (result.success) {
-          setView('planner');
-          if (result.firstDate) setCurrentDate(new Date(result.firstDate + 'T00:00:00'));
-      } else {
-          setError(result.error || 'Failed to parse file');
+  const cleanupRTC = () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      if (dc.current) dc.current.close();
+      if (pc.current) pc.current.close();
+      pc.current = null;
+      dc.current = null;
+      processedCandidates.current.clear();
+      setSyncStatus('disconnected');
+  };
+
+  const disconnectFromRoom = () => {
+      cleanupRTC();
+      setSyncStatus('disconnected');
+  };
+
+  const connectToRoom = async () => {
+      const { db, appId, user } = firebaseState;
+      if (!db || !user || !roomCode) {
+          alert("Database not ready or room code empty.");
+          return;
       }
-    } catch (err) {
-      setError('Failed to read file.');
-    }
-  };
 
-  const handleUrlFetch = async () => {
-    if (!urlInput) return;
-    setIsLoading(true);
-    setError('');
-    try {
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlInput)}`;
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error('Network error');
-      const text = await response.text();
-      if (!text.includes('BEGIN:VCALENDAR')) throw new Error('Invalid iCal data');
-      processICSContent(text);
-      setView('planner');
-    } catch (err) {
-      setError('Failed to fetch URL. Try manual upload.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      cleanupRTC();
+      setSyncStatus('connecting');
 
-  const handleJsonSave = () => {
-      const result = importJsonData(jsonEditText);
-      if (result.success) {
-          closeModal('jsonEdit');
-          setView('planner');
-      } else {
-          alert(result.error);
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'signaling', roomCode);
+      
+      try {
+          const snapshot = await getDoc(docRef);
+          const data = snapshot.exists() ? snapshot.data() : null;
+          
+          const now = Date.now();
+          const isStale = data && (now - (data.last_seen || 0) > 15000);
+          
+          if (!data || isStale) {
+              await becomeHost(docRef);
+          } else {
+              await becomeClient(docRef);
+          }
+      } catch (e) {
+          console.error("Connection failed", e);
+          setSyncStatus('error');
       }
   };
 
-  const handleICSExport = () => {
-      const content = exportICS();
-      if (!content) { alert("No events"); return; }
-      const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'planner_export.ics');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+  const becomeHost = async (docRef) => {
+      isHost.current = true;
+      console.log(`Becoming HOST for room: ${roomCode}`);
+
+      pc.current = new RTCPeerConnection(RTC_CONFIG);
+      const channel = pc.current.createDataChannel("planner_sync");
+      setupDataChannel(channel);
+
+      pc.current.onicecandidate = (event) => {
+          if (event.candidate) {
+              updateDoc(docRef, { host_candidates: arrayUnion(JSON.stringify(event.candidate)) }).catch(()=>{});
+          }
+      };
+
+      const offer = await pc.current.createOffer();
+      await pc.current.setLocalDescription(offer);
+
+      await setDoc(docRef, {
+          offer: JSON.stringify(offer),
+          last_seen: Date.now(),
+          type: 'host_active',
+          host_candidates: [],
+          peer_candidates: []
+      });
+
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(() => {
+          updateDoc(docRef, { last_seen: Date.now() }).catch(() => {});
+      }, 5000);
+
+      onSnapshot(docRef, (snap) => {
+          if (!snap.exists()) return;
+          const data = snap.data();
+          if (!pc.current) return;
+
+          if (!pc.current.currentRemoteDescription && data.answer) {
+              const answer = JSON.parse(data.answer);
+              pc.current.setRemoteDescription(answer);
+          }
+          if (data.peer_candidates) {
+              data.peer_candidates.forEach(c => {
+                  if (!processedCandidates.current.has(c)) {
+                      processedCandidates.current.add(c);
+                      pc.current.addIceCandidate(JSON.parse(c)).catch(()=>{});
+                  }
+              });
+          }
+      });
   };
 
-  // --- Task Operations ---
+  const becomeClient = async (docRef) => {
+      isHost.current = false;
+      console.log(`Becoming CLIENT for room: ${roomCode}`);
 
-  const toggleTask = (e, id) => {
-    e.stopPropagation();
-    toggleTaskCompletion(id);
+      pc.current = new RTCPeerConnection(RTC_CONFIG);
+      
+      pc.current.ondatachannel = (e) => {
+          setupDataChannel(e.channel);
+      };
+      
+      pc.current.onicecandidate = (event) => {
+           if (event.candidate) {
+               updateDoc(docRef, { peer_candidates: arrayUnion(JSON.stringify(event.candidate)) }).catch(()=>{});
+           }
+      };
+
+      const unsubscribe = onSnapshot(docRef, async (snap) => {
+          if (!snap.exists()) return;
+          const data = snap.data();
+          
+          if (Date.now() - (data.last_seen || 0) > 15000) {
+              console.log("Host missing, restarting election...");
+              unsubscribe();
+              connectToRoom(); 
+              return;
+          }
+
+          if (!pc.current.currentRemoteDescription && data.offer) {
+              const offer = JSON.parse(data.offer);
+              await pc.current.setRemoteDescription(offer);
+              const answer = await pc.current.createAnswer();
+              await pc.current.setLocalDescription(answer);
+              await updateDoc(docRef, { answer: JSON.stringify(answer) });
+          }
+          
+          if (data.host_candidates) {
+              data.host_candidates.forEach(c => {
+                  if (!processedCandidates.current.has(c)) {
+                      processedCandidates.current.add(c);
+                      pc.current.addIceCandidate(JSON.parse(c)).catch(()=>{});
+                  }
+              });
+          }
+      });
   };
 
-  const openNewTaskModal = () => openTaskModal(null);
-  const openEditTaskModalWrapper = (task) => openTaskModal(task);
+  const setupDataChannel = (channel) => {
+      dc.current = channel;
+      channel.onopen = () => {
+          setSyncStatus('connected');
+          sendSyncPayload();
+      };
+      channel.onclose = () => {
+          setSyncStatus('disconnected');
+      };
+      channel.onmessage = (event) => handleSyncMessage(event);
+  };
 
-  const saveTask = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const isAllDay = formData.get('isAllDay') === 'on';
-    const timeValue = isAllDay ? '' : formData.get('time');
-
-    const baseTask = {
-      title: formData.get('title'),
-      time: timeValue, 
-      class: formData.get('class'),
-      type: formData.get('type'),
-      priority: formData.get('priority') || 'Medium',
-      description: formData.get('description') || '',
-      completed: editingTask ? editingTask.completed : false,
-    };
-    
-    const startDate = formData.get('date');
-    const recurrence = formData.get('recurrence'); 
-    const recurrenceEnd = formData.get('recurrenceEnd');
-    const editScope = formData.get('editScope');
-
-    if (!classColors[baseTask.class]) {
-        const used = Object.values(classColors);
-        const nextColor = PALETTE.find(c => !used.includes(c)) || PALETTE[0];
-        setClassColors(prev => ({...prev, [baseTask.class]: nextColor }));
-    }
-
-    if (editingTask) {
-      updateEvent({ ...baseTask, date: startDate, id: editingTask.id, groupId: editingTask.groupId }, editScope);
-    } else {
-      let currentDateStr = startDate;
-      let intervalDays = 0;
-      if (recurrence === 'weekly') intervalDays = 7;
-      if (recurrence === 'biweekly') intervalDays = 14;
-
-      const newGroupId = intervalDays > 0 ? `grp-${Date.now()}` : null;
-      const newEvents = [];
-
-      if (intervalDays === 0 || !recurrenceEnd) {
-         newEvents.push({ ...baseTask, date: startDate, id: `manual-${Date.now()}-0`, groupId: null });
-      } else {
-         let count = 0;
-         while (currentDateStr <= recurrenceEnd && count < 52) { 
-            newEvents.push({ 
-                ...baseTask, 
-                date: currentDateStr, 
-                id: `manual-${Date.now()}-${count}`, 
-                groupId: newGroupId 
-            });
-            currentDateStr = addDaysToDate(currentDateStr, intervalDays);
-            count++;
-         }
+  const sendSyncPayload = () => {
+      if (dc.current?.readyState === 'open') {
+          const payload = JSON.stringify({
+              type: 'SYNC_DATA',
+              timestamp: lastModified,
+              data: { events, classColors, hiddenClasses }
+          });
+          dc.current.send(payload);
       }
-      setEvents(prev => [...prev, ...newEvents]);
-    }
-    closeModal('task');
   };
 
-  const handleDeleteTask = (id) => {
-      if (window.confirm('Delete task?')) {
-          deleteEvent(id);
-          closeModal('task');
-      }
+  const handleSyncMessage = (event) => {
+      try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'SYNC_DATA') {
+              const remoteTime = msg.timestamp;
+              const localTime = lastModified;
+
+              if (remoteTime > localTime) {
+                  bulkUpdateFromSync(msg.data.events, msg.data.classColors, msg.data.hiddenClasses, remoteTime);
+              } else if (localTime > remoteTime) {
+                  sendSyncPayload();
+              }
+          }
+      } catch (e) { console.error("Sync parse error", e); }
   };
 
-  const handleMergeClasses = () => {
-      mergeClasses(mergeSource, mergeTarget);
-      setMergeSource('');
-      setMergeTarget('');
-  };
+  useEffect(() => {
+      if (syncStatus === 'connected') sendSyncPayload();
+  }, [events, classColors, hiddenClasses, lastModified]);
 
-  const handleReset = () => {
-      if (window.confirm("Reset all data?")) {
-          resetAllData();
-          setView('setup');
-          closeModal('settings');
-      }
-  };
 
-  // --- Drag and Drop ---
+  // --- Data Handlers ---
+
   const handleDragStart = (e, id) => {
     e.dataTransfer.setData("text/plain", id);
     e.dataTransfer.effectAllowed = "move";
     setDraggedEventId(id);
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
+  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
 
   const handleDrop = (e, targetDate) => {
     e.preventDefault();
     const id = e.dataTransfer.getData("text/plain");
-    const task = events.find(ev => ev.id === id);
-    if (task && targetDate) {
-        updateEvent({ ...task, date: targetDate });
-    }
+    if (!id || !targetDate) return;
+    const ev = events.find(e => e.id === id);
+    if (ev) updateEvent({ ...ev, date: targetDate });
     setDraggedEventId(null);
   };
 
   const handleSidebarDrop = (e, targetGroup) => {
     e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain");
     let targetDate = new Date();
     if (targetGroup === 'tomorrow') targetDate.setDate(targetDate.getDate() + 1);
-    else if (targetGroup !== 'today') return;
-    handleDrop(e, targetDate.toISOString().split('T')[0]);
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const ev = events.find(e => e.id === id);
+    if (ev) updateEvent({ ...ev, date: dateStr });
   };
 
-  // --- Filtering ---
+  const handleJsonSave = () => {
+      if (!jsonEditText) return;
+      const result = importJsonData(jsonEditText);
+      if (result.success) {
+          closeModal('jsonEdit');
+          if (view === 'setup') setView('planner');
+      } else {
+          alert("Invalid JSON: " + result.error);
+      }
+  };
+
+  // --- Filtering (Moved UP before conditional returns) ---
   const filteredEvents = useMemo(() => {
     const cutoffDate = new Date();
     cutoffDate.setMonth(cutoffDate.getMonth() - 1);
@@ -309,30 +359,76 @@ export default function App() {
     });
   }, [events, hiddenClasses, activeTypeFilter, searchQuery, showCompleted]);
 
-  // --- Render ---
 
+  // --- VIEW RENDERING ---
+
+  // Common Modals (Rendered always to support JSON import from Setup)
+  const renderModals = () => (
+    <>
+      <SettingsModal
+        isOpen={modals.settings || modals.jsonEdit} // Show if either is active (jsonEdit usually inside settings, but we support standalone)
+        onClose={() => { closeModal('settings'); closeModal('jsonEdit'); }}
+        classColors={classColors} setClassColors={setClassColors}
+        mergeSource={mergeSource} setMergeSource={setMergeSource}
+        mergeTarget={mergeTarget} setMergeTarget={setMergeTarget}
+        mergeClasses={() => { mergeClasses(mergeSource, mergeTarget); setMergeSource(''); setMergeTarget(''); }}
+        deleteClass={deleteClass}
+        resetAllData={resetAllData}
+        showJsonEdit={modals.jsonEdit} setShowJsonEdit={(val) => val ? openModal('jsonEdit') : closeModal('jsonEdit')}
+        jsonEditText={jsonEditText} setJsonEditText={setJsonEditText}
+        handleJsonSave={handleJsonSave}
+        handleICSExport={exportICS}
+        // Sync Props
+        roomCode={roomCode}
+        setRoomCode={setRoomCode}
+        syncStatus={syncStatus}
+        connectToRoom={connectToRoom}
+        disconnectFromRoom={disconnectFromRoom}
+      />
+
+      <TaskModal
+        isOpen={modals.task}
+        onClose={() => closeModal('task')}
+        editingTask={editingTask}
+        saveTask={(e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const isAllDay = formData.get('isAllDay') === 'on';
+            const baseTask = {
+              title: formData.get('title'),
+              time: isAllDay ? '' : formData.get('time'), 
+              class: formData.get('class'),
+              type: formData.get('type'),
+              priority: formData.get('priority') || 'Medium',
+              description: formData.get('description') || '',
+              completed: editingTask ? editingTask.completed : false,
+            };
+            const startDate = formData.get('date');
+            
+            if (editingTask) {
+                updateEvent({ ...baseTask, date: startDate, id: editingTask.id, groupId: editingTask.groupId });
+            } else {
+                addEvent({ ...baseTask, date: startDate, id: `manual-${Date.now()}`, groupId: null });
+            }
+            closeModal('task');
+        }}
+        deleteTask={(id) => { deleteEvent(id); closeModal('task'); }}
+        classColors={classColors}
+      />
+    </>
+  );
+
+  // Setup View
   if (view === 'setup') {
     return (
-      <SetupScreen
-        handleFileUpload={handleFileUpload}
-        handleUrlFetch={handleUrlFetch}
-        urlInput={urlInput}
-        setUrlInput={setUrlInput}
-        isLoading={isLoading}
-        error={error}
-        startEmpty={() => { setEvents([]); setView('planner'); openNewTaskModal(); }}
-        openJsonManual={() => { setJsonEditText('[]'); openModal('jsonEdit'); }}
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
-        showJsonEdit={modals.jsonEdit}
-        setShowJsonEdit={(v) => v ? openModal('jsonEdit') : closeModal('jsonEdit')}
-        jsonEditText={jsonEditText}
-        setJsonEditText={setJsonEditText}
-        handleJsonSave={handleJsonSave}
-      />
+      <div className="bg-white dark:bg-slate-900 min-h-screen">
+          <SetupScreen />
+          {renderModals()}
+      </div>
     );
   }
 
+  // Planner View
   return (
     <div className={`h-screen flex flex-col bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans overflow-hidden transition-colors duration-300`}>
       {/* Header */}
@@ -340,27 +436,19 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className="bg-blue-600 p-1.5 rounded-lg"><CalendarIcon className="w-5 h-5 text-white" /></div>
           <h1 className="font-bold text-lg hidden md:block">Homework Planner</h1>
-          {syncCode && (
-              <div className={`hidden md:flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border animate-in fade-in ${syncStatus === 'connected' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'}`}>
+          
+          {syncStatus !== 'disconnected' && (
+              <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border animate-in fade-in ${syncStatus === 'connected' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'}`}>
                   {syncStatus === 'connected' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                  <span className="uppercase">{syncStatus === 'connected' ? 'P2P Connected' : 'Connecting...'}</span>
+                  <span className="uppercase">{syncStatus === 'connected' ? 'Synced' : 'Connecting...'}</span>
               </div>
           )}
         </div>
         
         {/* View Switcher */}
         <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-            {[
-                { id: 'month', icon: LayoutGrid, label: 'Month' },
-                { id: 'week', icon: Columns, label: 'Week' },
-                { id: 'day', icon: Rows, label: 'Day' },
-                { id: 'agenda', icon: AlignLeft, label: 'Agenda' }
-            ].map(v => (
-                <button
-                    key={v.id}
-                    onClick={() => setCalendarView(v.id)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${calendarView === v.id ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
+            {[{ id: 'month', icon: LayoutGrid, label: 'Month' }, { id: 'week', icon: Columns, label: 'Week' }, { id: 'day', icon: Rows, label: 'Day' }, { id: 'agenda', icon: AlignLeft, label: 'Agenda' }].map(v => (
+                <button key={v.id} onClick={() => setCalendarView(v.id)} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${calendarView === v.id ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
                     <v.icon className="w-4 h-4" />
                     <span className="hidden sm:inline">{v.label}</span>
                 </button>
@@ -368,73 +456,51 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={openNewTaskModal} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1 shadow-sm"><Plus className="w-4 h-4" /> New</button>
+          <button onClick={() => openTaskModal(null)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1 shadow-sm"><Plus className="w-4 h-4" /> New</button>
           <button onClick={() => setDarkMode(!darkMode)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">{darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
           <div className="w-px h-5 bg-slate-200 mx-2"></div>
           <button onClick={() => openModal('settings')} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
               <Settings className="w-4 h-4" />
-              {syncCode && <span className={`absolute top-2 right-2 w-2 h-2 rounded-full border border-white ${syncStatus === 'connected' ? 'bg-green-500' : 'bg-amber-500'}`}></span>}
+              {syncStatus !== 'disconnected' && <span className={`absolute top-2 right-2 w-2 h-2 rounded-full border border-white ${syncStatus === 'connected' ? 'bg-green-500' : 'bg-amber-500'}`}></span>}
           </button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          activeTypeFilter={activeTypeFilter}
-          setActiveTypeFilter={setActiveTypeFilter}
-          hiddenClasses={hiddenClasses}
-          setHiddenClasses={setHiddenClasses}
-          classColors={classColors}
-          filteredEvents={filteredEvents}
-          hideOverdue={hideOverdue}
-          setHideOverdue={setHideOverdue}
-          handleDragStart={handleDragStart}
-          handleDragOver={handleDragOver}
-          handleSidebarDrop={handleSidebarDrop}
-          toggleTask={toggleTask}
-          openEditTaskModal={openEditTaskModalWrapper}
+          searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+          activeTypeFilter={activeTypeFilter} setActiveTypeFilter={setActiveTypeFilter}
+          hiddenClasses={hiddenClasses} setHiddenClasses={setHiddenClasses}
+          classColors={classColors} filteredEvents={filteredEvents}
+          hideOverdue={hideOverdue} setHideOverdue={setHideOverdue}
+          handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleSidebarDrop={handleSidebarDrop}
+          toggleTask={(e, id) => { e.stopPropagation(); useEvents().toggleTaskCompletion(id); }}
+          openEditTaskModal={(task) => openTaskModal(task)}
           draggedEventId={draggedEventId}
-          showCompleted={showCompleted}
-          setShowCompleted={setShowCompleted}
+          showCompleted={showCompleted} setShowCompleted={setShowCompleted}
         />
-        <CalendarView /> 
+        <CalendarView
+          currentDate={currentDate} setCurrentDate={setCurrentDate}
+          calendarView={calendarView} setCalendarView={setCalendarView}
+          filteredEvents={filteredEvents} classColors={classColors}
+          openEditTaskModal={(task) => openTaskModal(task)}
+          handleDragOver={handleDragOver} handleDragStart={handleDragStart} handleDrop={handleDrop}
+          draggedEventId={draggedEventId}
+        />
       </div>
 
-      <SettingsModal
-        isOpen={modals.settings}
-        onClose={() => closeModal('settings')}
-        classColors={classColors}
-        setClassColors={setClassColors}
-        mergeSource={mergeSource}
-        setMergeSource={setMergeSource}
-        mergeTarget={mergeTarget}
-        setMergeTarget={setMergeTarget}
-        mergeClasses={handleMergeClasses}
-        deleteClass={(cls) => deleteClass(cls)}
-        resetAllData={handleReset}
-        showJsonEdit={modals.jsonEdit}
-        setShowJsonEdit={(v) => v ? openModal('jsonEdit') : closeModal('jsonEdit')}
-        jsonEditText={jsonEditText}
-        setJsonEditText={setJsonEditText}
-        handleJsonSave={handleJsonSave}
-        handleICSExport={handleICSExport}
-        syncCode={syncCode}
-        syncStatus={syncStatus}
-        createSyncSession={createSyncSession}
-        joinSyncSession={joinSyncSession}
-        leaveSyncSession={leaveSyncSession}
-      />
-
-      <TaskModal
-        isOpen={modals.task}
-        onClose={() => closeModal('task')}
-        editingTask={editingTask}
-        saveTask={saveTask}
-        deleteTask={handleDeleteTask}
-        classColors={classColors}
-      />
+      {renderModals()}
     </div>
+  );
+}
+
+// Main Export wrapping with Providers to prevent Context errors
+export default function App() {
+  return (
+    <EventProvider>
+      <UIProvider>
+        <PlannerApp />
+      </UIProvider>
+    </EventProvider>
   );
 }
