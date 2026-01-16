@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
 import { usePlannerSync } from "./hooks/usePlannerSync"; 
 import { useEvents, useUI, EventProvider, UIProvider } from "./context/PlannerContext";
 import SetupScreen from "./components/setup/SetupScreen";
@@ -68,10 +68,22 @@ function PlannerApp() {
         appId: import.meta.env.VITE_FIREBASE_APP_ID,
       });
       const auth = getAuth(app);
-      const db = getFirestore(app);
+      
+      // FIX: Use memoryLocalCache to prevent BloomFilterError in iframes/sandboxes
+      const db = initializeFirestore(app, {
+        localCache: memoryLocalCache()
+      });
+      
       const appId = import.meta.env.VITE_FIREBASE_APP_ID || "default-app-id";
-      signInAnonymously(auth);
-      return onAuthStateChanged(auth, (u) => setFirebaseState({ db, user: u, appId }));
+      
+      const unsubscribe = onAuthStateChanged(auth, (u) => {
+         if (u) {
+            setFirebaseState({ db, user: u, appId });
+         } else {
+            signInAnonymously(auth).catch(console.error);
+         }
+      });
+      return () => unsubscribe();
     } catch (e) {
       console.error("Firebase init failed", e);
     }
@@ -81,6 +93,10 @@ function PlannerApp() {
 
   // --- Logic: Connect / Create ---
   const handleSyncConnect = async (code, password) => {
+      if (!firebaseState.user) {
+          alert("Connecting to synchronization server... please wait.");
+          return;
+      }
       try {
           // Try to join first
           await joinSyncSession(code, password);
@@ -191,9 +207,9 @@ function PlannerApp() {
           <div className="bg-blue-600 p-1.5 rounded-lg"><CalendarIcon className="w-5 h-5 text-white" /></div>
           <h1 className="font-bold text-lg hidden md:block">Homework Planner</h1>
           {syncStatus !== "disconnected" && (
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border animate-in fade-in ${syncStatus === "connected" ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800" : (syncStatus === "error" ? "bg-red-50 text-red-600 border-red-200" : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800")}`}>
-              {syncStatus === "connected" ? <Wifi className="w-3 h-3" /> : (syncStatus === "error" ? <AlertCircle className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />)}
-              <span className="uppercase">{syncStatus === "connected" ? "Synced" : (syncStatus === "error" ? "Error" : "Connecting...")}</span>
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border animate-in fade-in ${syncStatus === "connected" || syncStatus === "active" ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800" : (syncStatus === "error" ? "bg-red-50 text-red-600 border-red-200" : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800")}`}>
+              {(syncStatus === "connected" || syncStatus === "active") ? <Wifi className="w-3 h-3" /> : (syncStatus === "error" ? <AlertCircle className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />)}
+              <span className="uppercase">{(syncStatus === "connected" || syncStatus === "active") ? "Synced" : (syncStatus === "error" ? "Error" : "Connecting...")}</span>
             </div>
           )}
         </div>
@@ -206,7 +222,7 @@ function PlannerApp() {
           <button onClick={() => openTaskModal(null)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1 shadow-sm"><Plus className="w-4 h-4" /> New</button>
           <button onClick={() => setDarkMode(!darkMode)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">{darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}</button>
           <div className="w-px h-5 bg-slate-200 mx-2"></div>
-          <button onClick={() => openModal("settings")} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative"><Settings className="w-4 h-4" />{syncStatus !== "disconnected" && <span className={`absolute top-2 right-2 w-2 h-2 rounded-full border border-white ${syncStatus === "connected" ? "bg-green-500" : (syncStatus === "error" ? "bg-red-500" : "bg-amber-500")}`}></span>}</button>
+          <button onClick={() => openModal("settings")} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative"><Settings className="w-4 h-4" />{syncStatus !== "disconnected" && <span className={`absolute top-2 right-2 w-2 h-2 rounded-full border border-white ${(syncStatus === "connected" || syncStatus === "active") ? "bg-green-500" : (syncStatus === "error" ? "bg-red-500" : "bg-amber-500")}`}></span>}</button>
         </div>
       </header>
       <div className="flex flex-1 overflow-hidden">

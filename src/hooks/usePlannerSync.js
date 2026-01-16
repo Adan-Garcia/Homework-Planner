@@ -31,8 +31,11 @@ export const usePlannerSync = (firebaseState, dataState) => {
   const dataChannels = useRef(new Map());
   const incomingChunks = useRef(new Map());
   const lastHeartbeat = useRef(new Map());
+  const pendingCandidates = useRef(new Map());
+  
   const heartbeatTimer = useRef(null);
   const roomLivenessTimer = useRef(null);
+  const unsubscribes = useRef([]);
 
   useEffect(() => {
     return () => cleanupRTC();
@@ -41,12 +44,19 @@ export const usePlannerSync = (firebaseState, dataState) => {
   const cleanupRTC = useCallback(() => {
     peerConnections.current.forEach(pc => pc.close());
     peerConnections.current.clear();
+    
     dataChannels.current.forEach(dc => dc.close());
     dataChannels.current.clear();
+    
     incomingChunks.current.clear();
     lastHeartbeat.current.clear();
+    pendingCandidates.current.clear();
+    
     if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
     if (roomLivenessTimer.current) clearInterval(roomLivenessTimer.current);
+    
+    unsubscribes.current.forEach(unsub => unsub());
+    unsubscribes.current = [];
     
     setSyncStatus('disconnected');
     setSyncCode(null);
@@ -55,6 +65,10 @@ export const usePlannerSync = (firebaseState, dataState) => {
   }, []);
 
   // --- Data Channel Logic ---
+  const handleRemoteUpdate = (data) => {
+      if (syncWithRemote) syncWithRemote(data);
+  };
+
   const handleDataMessage = useCallback((peerId, event) => {
     try {
       const msg = JSON.parse(event.data);
@@ -71,9 +85,12 @@ export const usePlannerSync = (firebaseState, dataState) => {
 
       if (msg.type === 'CHUNK') {
         if (!incomingChunks.current.has(peerId)) {
-          incomingChunks.current.set(peerId, { chunks: new Array(msg.total), count: 0 });
+          incomingChunks.current.set(peerId, { chunks: [], count: 0, total: msg.total });
         }
+        
         const transfer = incomingChunks.current.get(peerId);
+        if (!transfer.chunks) transfer.chunks = new Array(msg.total);
+        
         transfer.chunks[msg.index] = msg.data;
         transfer.count++;
 
@@ -92,10 +109,6 @@ export const usePlannerSync = (firebaseState, dataState) => {
       console.error("Sync parse error", e);
     }
   }, [syncWithRemote]);
-
-  const handleRemoteUpdate = (data) => {
-    if (syncWithRemote) syncWithRemote(data);
-  };
 
   const sendToPeer = (peerId, payload) => {
     const channel = dataChannels.current.get(peerId);
@@ -132,11 +145,12 @@ export const usePlannerSync = (firebaseState, dataState) => {
   }, [events, classColors, hiddenClasses, changeLog]);
 
   useEffect(() => {
-    const t = setTimeout(() => broadcastSyncData(), 200);
-    return () => clearTimeout(t);
-  }, [broadcastSyncData]);
+    if (syncStatus === 'connected') {
+        const t = setTimeout(() => broadcastSyncData(), 200);
+        return () => clearTimeout(t);
+    }
+  }, [broadcastSyncData, syncStatus]);
 
-  // --- Internal Heartbeat (WebRTC level) ---
   useEffect(() => {
     heartbeatTimer.current = setInterval(() => {
         const now = Date.now();
@@ -144,6 +158,7 @@ export const usePlannerSync = (firebaseState, dataState) => {
             if (dc.readyState === 'open') {
                 dc.send(JSON.stringify({ type: 'PING' }));
                 const last = lastHeartbeat.current.get(peerId) || now;
+                
                 if (now - last > CONNECTION_TIMEOUT) {
                     console.warn(`Peer ${peerId} timed out.`);
                     dc.close();
@@ -151,14 +166,14 @@ export const usePlannerSync = (firebaseState, dataState) => {
                     dataChannels.current.delete(peerId);
                     peerConnections.current.delete(peerId);
                     setActivePeers(prev => prev.filter(p => p !== peerId));
+                    if (activePeers.length <= 1) setSyncStatus('connecting'); 
                 }
             }
         });
     }, HEARTBEAT_INTERVAL);
     return () => clearInterval(heartbeatTimer.current);
-  }, []);
+  }, [activePeers.length]);
 
-  // --- Peer Gen ---
   const createPeerConnection = (peerId, initiator) => {
     if (peerConnections.current.has(peerId)) return peerConnections.current.get(peerId);
 
@@ -173,11 +188,7 @@ export const usePlannerSync = (firebaseState, dataState) => {
            target: peerId,
            sender: user.uid,
            candidate: JSON.stringify(event.candidate)
-        }).catch(e => {
-            console.error("Candidate write failed", e);
-            setSyncStatus('error');
-            setErrorMsg("Permissions Error: Check Firestore Rules");
-        });
+        }).catch(e => console.error("Candidate write failed", e));
       }
     };
 
@@ -186,6 +197,14 @@ export const usePlannerSync = (firebaseState, dataState) => {
              if (!activePeers.includes(peerId)) setActivePeers(prev => [...prev, peerId]);
              setSyncStatus('connected');
              setErrorMsg('');
+             
+             if (pendingCandidates.current.has(peerId)) {
+                 pendingCandidates.current.get(peerId).forEach(c => {
+                     pc.addIceCandidate(new RTCIceCandidate(c)).catch(e => console.error("Flush candidate error", e));
+                 });
+                 pendingCandidates.current.delete(peerId);
+             }
+
         } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
              setActivePeers(prev => prev.filter(p => p !== peerId));
              if (activePeers.length === 0) setSyncStatus('connecting');
@@ -205,7 +224,8 @@ export const usePlannerSync = (firebaseState, dataState) => {
   const setupChannel = (peerId, channel) => {
       dataChannels.current.set(peerId, channel);
       channel.onmessage = (e) => handleDataMessage(peerId, e);
-      channel.onopen = () => {
+      
+      const onOpen = () => {
           const payload = {
             type: 'SYNC_UPDATE',
             events, classColors, hiddenClasses, changeLog, 
@@ -213,9 +233,23 @@ export const usePlannerSync = (firebaseState, dataState) => {
           };
           sendToPeer(peerId, payload);
       };
+
+      if (channel.readyState === 'open') {
+          onOpen();
+      } else {
+          channel.onopen = onOpen;
+      }
   };
 
-  // --- Session Public API ---
+  const addIceCandidateSafely = (peerId, candidate) => {
+      const pc = peerConnections.current.get(peerId);
+      if (pc && pc.remoteDescription) {
+          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error("Add candidate error", e));
+      } else {
+          if (!pendingCandidates.current.has(peerId)) pendingCandidates.current.set(peerId, []);
+          pendingCandidates.current.get(peerId).push(candidate);
+      }
+  };
 
   const createSyncSession = useCallback(async (customCode, password) => {
     if (!db || !user) return;
@@ -223,11 +257,10 @@ export const usePlannerSync = (firebaseState, dataState) => {
     
     const code = customCode || generateSyncCode();
     setSyncCode(code);
-    setSyncStatus('active'); 
+    setSyncStatus('connecting'); 
 
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'signaling', code);
     
-    // Clear old data if taking over
     try {
         const offers = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'offers'));
         offers.forEach(d => deleteDoc(d.ref));
@@ -243,23 +276,21 @@ export const usePlannerSync = (firebaseState, dataState) => {
       peers: []
     });
 
-    // Start Host Heartbeat
     roomLivenessTimer.current = setInterval(() => {
-        updateDoc(docRef, { last_seen: Date.now() }).catch(e => {
-            console.error("Heartbeat failed", e);
-            // Don't error UI on heartbeat fail alone, but log it
-        });
+        updateDoc(docRef, { last_seen: Date.now() }).catch(console.error);
     }, 5000);
 
-    onSnapshot(docRef, async (snap) => {
+    const unsubRoom = onSnapshot(docRef, async (snap) => {
         if (!snap.exists()) return;
         const data = snap.data();
+        
         if (data.peers) {
             data.peers.forEach(async (peerId) => {
                 if (peerId !== user.uid && !peerConnections.current.has(peerId)) {
                     const pc = createPeerConnection(peerId, true);
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
+                    
                     const offerColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'offers');
                     await addDoc(offerColl, {
                         to: peerId, from: user.uid, type: 'offer', sdp: JSON.stringify(offer)
@@ -268,36 +299,52 @@ export const usePlannerSync = (firebaseState, dataState) => {
             });
         }
     }, (err) => {
-        console.error("Room listener error", err);
-        setSyncStatus('error');
-        setErrorMsg("Permission Denied: Cannot listen to Room");
+        console.error("Room listener error, attempting retry...", err);
+        if (err.code !== 'permission-denied') {
+             // We can optionally set a warning status here, but usually firestore SDK retries
+        } else {
+             setSyncStatus('error');
+             setErrorMsg("Permission Denied: Cannot listen to Room");
+        }
     });
+    unsubscribes.current.push(unsubRoom);
 
     const offerColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'offers');
-    onSnapshot(offerColl, (snap) => {
+    const unsubOffers = onSnapshot(offerColl, (snap) => {
         snap.docChanges().forEach(async (change) => {
             if (change.type === 'added') {
                 const data = change.doc.data();
                 if (data.to === user.uid && data.type === 'answer') {
                     const pc = peerConnections.current.get(data.from);
-                    if (pc && !pc.currentRemoteDescription) await pc.setRemoteDescription(JSON.parse(data.sdp));
+                    if (pc && !pc.currentRemoteDescription) {
+                        await pc.setRemoteDescription(JSON.parse(data.sdp));
+                        if (pendingCandidates.current.has(data.from)) {
+                             pendingCandidates.current.get(data.from).forEach(c => {
+                                 pc.addIceCandidate(new RTCIceCandidate(c)).catch(e => console.error("Flush candidate error", e));
+                             });
+                             pendingCandidates.current.delete(data.from);
+                        }
+                    }
                 }
             }
         });
-    }, (err) => console.error("Offers listener error", err));
+    }, (err) => console.warn("Offer listener warning:", err)); 
+    unsubscribes.current.push(unsubOffers);
 
     const candColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'candidates');
-    onSnapshot(candColl, (snap) => {
+    const unsubCands = onSnapshot(candColl, (snap) => {
         snap.docChanges().forEach((change) => {
             if (change.type === 'added') {
                 const data = change.doc.data();
                 if (data.target === user.uid) {
-                    const pc = peerConnections.current.get(data.sender);
-                    if (pc) pc.addIceCandidate(JSON.parse(data.candidate)).catch(e => {});
+                    addIceCandidateSafely(data.sender, JSON.parse(data.candidate));
                 }
             }
         });
-    }, (err) => console.error("Candidates listener error", err));
+    }, (err) => console.warn("Candidate listener warning:", err)); 
+    unsubscribes.current.push(unsubCands);
+
+    setSyncStatus('active'); 
 
   }, [db, user, appId, cleanupRTC, events]);
 
@@ -319,9 +366,8 @@ export const usePlannerSync = (firebaseState, dataState) => {
         throw new Error("Invalid Password");
     }
 
-    // Check Liveness (Host must have updated within last 15 seconds)
     const lastSeen = sessionData.last_seen || 0;
-    if (Date.now() - lastSeen > 15000) {
+    if (Date.now() - lastSeen > 30000) { 
         throw new Error("Room is inactive");
     }
 
@@ -331,38 +377,53 @@ export const usePlannerSync = (firebaseState, dataState) => {
     await updateDoc(docRef, { peers: arrayUnion(user.uid) });
 
     const offerColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'offers');
-    onSnapshot(offerColl, (snap) => {
+    const unsubOffers = onSnapshot(offerColl, (snap) => {
         snap.docChanges().forEach(async (change) => {
             if (change.type === 'added') {
                 const data = change.doc.data();
                 if (data.to === user.uid && data.type === 'offer') {
                     const pc = createPeerConnection(data.from, false);
-                    await pc.setRemoteDescription(JSON.parse(data.sdp));
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    await addDoc(offerColl, {
-                        to: data.from, from: user.uid, type: 'answer', sdp: JSON.stringify(answer)
-                    });
+                    
+                    if (pc.signalingState !== 'stable') {
+                        await pc.setRemoteDescription(JSON.parse(data.sdp));
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        
+                        await addDoc(offerColl, {
+                            to: data.from, from: user.uid, type: 'answer', sdp: JSON.stringify(answer)
+                        });
+
+                        if (pendingCandidates.current.has(data.from)) {
+                             pendingCandidates.current.get(data.from).forEach(c => {
+                                 pc.addIceCandidate(new RTCIceCandidate(c)).catch(e => console.error("Flush candidate error", e));
+                             });
+                             pendingCandidates.current.delete(data.from);
+                        }
+                    }
                 }
             }
         });
     }, (err) => {
-        setSyncStatus('error');
-        setErrorMsg("Permission Denied: Cannot listen to Offers");
+         console.warn("Offer listener error:", err);
+         if(err.code === 'permission-denied') {
+             setSyncStatus('error');
+             setErrorMsg("Permission Denied: Cannot listen to Offers");
+         }
     });
+    unsubscribes.current.push(unsubOffers);
 
     const candColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'candidates');
-    onSnapshot(candColl, (snap) => {
+    const unsubCands = onSnapshot(candColl, (snap) => {
         snap.docChanges().forEach((change) => {
             if (change.type === 'added') {
                 const data = change.doc.data();
                 if (data.target === user.uid) {
-                    const pc = peerConnections.current.get(data.sender);
-                    if (pc) pc.addIceCandidate(JSON.parse(data.candidate)).catch(e => {});
+                     addIceCandidateSafely(data.sender, JSON.parse(data.candidate));
                 }
             }
         });
-    }, (err) => console.error("Candidates listener error", err));
+    }, (err) => console.warn("Candidate listener warning:", err));
+    unsubscribes.current.push(unsubCands);
 
   }, [db, user, appId, cleanupRTC, events]);
 
