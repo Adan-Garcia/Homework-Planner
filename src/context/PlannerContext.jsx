@@ -29,10 +29,7 @@ export const EventProvider = ({ children }) => {
   const [hiddenClasses, setHiddenClasses] = useState(() => loadState(STORAGE_KEYS.HIDDEN, []));
   
   // NEW: Change Log for robust sync (Change-based instead of State-based)
-  // Stores array of { id: string, op: string, val: any, ts: number }
   const [changeLog, setChangeLog] = useState(() => loadState('hw_change_log', []));
-  
-  // Keep lastModified for heartbeat/connection checks
   const [lastModified, setLastModified] = useState(() => loadState('hw_last_modified', Date.now()));
 
   // Persistence
@@ -40,21 +37,19 @@ export const EventProvider = ({ children }) => {
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(classColors)); }, [classColors]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.HIDDEN, JSON.stringify(hiddenClasses)); }, [hiddenClasses]);
   useEffect(() => { localStorage.setItem('hw_last_modified', JSON.stringify(lastModified)); }, [lastModified]);
-  // Persist Change Log
   useEffect(() => { localStorage.setItem('hw_change_log', JSON.stringify(changeLog)); }, [changeLog]);
 
-  // --- Change Log Helper ---
-  // Records an action so peers can replay it instead of overwriting state
+  // --- Change Log Logic ---
   const logChange = useCallback((op, val) => {
     const change = {
-      id: Math.random().toString(36).substr(2, 9) + Date.now().toString(36), // Unique ID
+      id: Math.random().toString(36).substr(2, 9) + Date.now().toString(36),
       ts: Date.now(),
       op,  // 'ADD', 'UPDATE', 'DELETE', 'MERGE_CLASS', 'DELETE_CLASS'
-      val  // The data needed to perform the op
+      val  // Data associated with the op
     };
     
     setChangeLog(prev => {
-      // Keep last 100 changes to keep payload light but allow recovery
+      // Keep last 100 changes to prevent unlimited growth
       const newLog = [...prev, change];
       return newLog.slice(-100); 
     });
@@ -116,14 +111,9 @@ export const EventProvider = ({ children }) => {
       parsed.sort((a, b) => new Date(a.date) - new Date(b.date));
       const newColors = generateColorsForNewClasses(parsed.map(e => e.class), {});
 
-      // For bulk import, we just reset and log a "bulk" event or individual add events?
-      // Individual allows better syncing.
       setEvents(parsed);
       setClassColors(newColors);
       
-      // Log a special bulk op or just touch data. 
-      // For massive imports, log might overflow, so we might rely on snapshot sync fallback if needed.
-      // But let's log the clear/reset for safety.
       logChange('BULK_IMPORT', { count: parsed.length }); 
       
       return { success: true, count: parsed.length, firstDate: parsed.length > 0 ? parsed[0].date : null };
@@ -144,20 +134,23 @@ export const EventProvider = ({ children }) => {
   };
 
   const updateEvent = (updatedEvent, scope = 'single') => {
-      // Optimistic Update
+      // Handle Series Update
       if (scope === 'series' && updatedEvent.groupId) {
         setEvents(prev => prev.map(ev => {
             if (ev.groupId === updatedEvent.groupId) {
+                // Keep date/id distinct, update other props
                 return { ...ev, ...updatedEvent, date: ev.date, id: ev.id, groupId: ev.groupId };
             }
             return ev;
         }));
         logChange('UPDATE_SERIES', updatedEvent);
       } else {
+        // Single Update
         setEvents(prev => prev.map(ev => ev.id === updatedEvent.id ? updatedEvent : ev));
         logChange('UPDATE', updatedEvent);
       }
       
+      // Check for new class color
       if (!classColors[updatedEvent.class]) {
         setClassColors(prev => generateColorsForNewClasses([updatedEvent.class], prev));
     }
@@ -194,7 +187,6 @@ export const EventProvider = ({ children }) => {
   };
 
   const removeDuplicates = () => {
-    // This is a local cleanup, we can treat it as a bulk update
     const seen = new Set();
     const uniqueEvents = [];
     let duplicatesCount = 0;
@@ -230,7 +222,7 @@ export const EventProvider = ({ children }) => {
     setEvents([]);
     setClassColors({});
     setHiddenClasses([]);
-    setChangeLog([]); // Reset log too
+    setChangeLog([]); 
     localStorage.clear();
     logChange('RESET', null);
   };
@@ -263,15 +255,13 @@ export const EventProvider = ({ children }) => {
 
   const exportICS = () => generateICS(events);
 
-  // --- SYNC LOGIC: Replay Log instead of Overwriting ---
-  // Replaces "bulkUpdateFromSync"
+  // --- SYNC LOGIC: Replay Log ---
   const syncWithRemote = (remoteData) => {
-      const { changeLog: remoteLog, classColors: remoteColors } = remoteData;
+      const { changeLog: remoteLog, classColors: remoteColors, hiddenClasses: remoteHidden } = remoteData;
       
-      // 1. Merge Colors (Simple Union / Last Write Wins per key)
-      if (remoteColors) {
-          setClassColors(prev => ({ ...prev, ...remoteColors }));
-      }
+      // 1. Merge Colors & Hidden
+      if (remoteColors) setClassColors(prev => ({ ...prev, ...remoteColors }));
+      if (remoteHidden) setHiddenClasses(prev => [...new Set([...prev, ...remoteHidden])]);
 
       // 2. Process Change Log
       if (remoteLog && Array.isArray(remoteLog)) {
@@ -279,7 +269,7 @@ export const EventProvider = ({ children }) => {
           const localChangeIds = new Set(changeLog.map(c => c.id));
           const newChanges = remoteLog.filter(c => !localChangeIds.has(c.id));
 
-          if (newChanges.length === 0) return; // Nothing new
+          if (newChanges.length === 0) return;
 
           console.log(`Applying ${newChanges.length} new changes from remote.`);
           
@@ -305,7 +295,17 @@ export const EventProvider = ({ children }) => {
                           // Treat update as add if missing (eventual consistency)
                           updated.push(val); 
                       }
-                  } 
+                  }
+                  else if (op === 'UPDATE_SERIES') {
+                      if (val.groupId) {
+                          updated = updated.map(ev => {
+                              if (ev.groupId === val.groupId) {
+                                  return { ...ev, ...val, date: ev.date, id: ev.id, groupId: ev.groupId };
+                              }
+                              return ev;
+                          });
+                      }
+                  }
                   else if (op === 'DELETE') {
                       updated = updated.filter(e => e.id !== val);
                   }
@@ -315,17 +315,15 @@ export const EventProvider = ({ children }) => {
                   else if (op === 'MERGE_CLASS') {
                       updated = updated.map(e => e.class === val.source ? { ...e, class: val.target } : e);
                   }
-                  else if (op === 'BULK_IMPORT' || op === 'RESET') {
-                       // Complex to handle perfectly in log replay without sending full payload
-                       // But usually followed by specific adds or we accept we might need a snapshot sync
-                       // For now, ignore purely signal ops
+                  else if (op === 'DELETE_BEFORE') {
+                      updated = updated.filter(e => e.date >= val);
                   }
               });
 
               return updated;
           });
 
-          // 3. Update Local Log with New Changes (so we don't re-process them)
+          // 3. Update Local Log with New Changes
           setChangeLog(prev => {
               const combined = [...prev, ...newChanges];
               // Keep log size manageable
@@ -342,8 +340,8 @@ export const EventProvider = ({ children }) => {
       classColors, setClassColors,
       hiddenClasses, setHiddenClasses,
       lastModified, setLastModified,
-      changeLog, // Export log for App.jsx to send
-      syncWithRemote, // New smart sync function
+      changeLog,
+      syncWithRemote,
       processICSContent, addEvent, updateEvent, deleteEvent,
       toggleTaskCompletion, deleteClass, mergeClasses,
       resetAllData, importJsonData, exportICS,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { doc, setDoc, updateDoc, onSnapshot, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, onSnapshot, arrayUnion, serverTimestamp, getDoc, collection, addDoc } from 'firebase/firestore';
 import { generateSyncCode } from '../utils/helpers';
 
 const RTC_CONFIG = {
@@ -8,176 +8,316 @@ const RTC_CONFIG = {
   ]
 };
 
+const CHUNK_SIZE = 16384; // 16KB for safe WebRTC transfer
+const HEARTBEAT_INTERVAL = 5000;
+const CONNECTION_TIMEOUT = 15000;
+
 export const usePlannerSync = (firebaseState, dataState) => {
   const { db, user, appId } = firebaseState;
-  const { events, classColors, hiddenClasses, setEvents, setClassColors, setHiddenClasses } = dataState;
+  const { 
+    events, 
+    classColors, 
+    hiddenClasses, 
+    changeLog,          
+    syncWithRemote      
+  } = dataState;
 
   const [syncCode, setSyncCode] = useState(null);
-  const [syncStatus, setSyncStatus] = useState('disconnected'); // disconnected, connecting, connected
+  const [syncStatus, setSyncStatus] = useState('disconnected');
+  const [activePeers, setActivePeers] = useState([]); // List of connected peer IDs
   
-  const pc = useRef(null);
-  const dc = useRef(null);
-  const isHost = useRef(false);
-  const isRemoteUpdate = useRef(false);
+  // Refs for Multi-User Management
+  const peerConnections = useRef(new Map()); // Map<peerId, RTCPeerConnection>
+  const dataChannels = useRef(new Map());    // Map<peerId, RTCDataChannel>
   const processedCandidates = useRef(new Set());
+  const incomingChunks = useRef(new Map());  // Map<peerId, { buffers: [], total: 0, received: 0 }>
+  const lastHeartbeat = useRef(new Map());   // Map<peerId, timestamp>
+  const heartbeatTimer = useRef(null);
+  const isHost = useRef(false);
 
-  // Cleanup on unmount
+  // cleanup
   useEffect(() => {
     return () => cleanupRTC();
   }, []);
 
   const cleanupRTC = useCallback(() => {
-    if (dc.current) dc.current.close();
-    if (pc.current) pc.current.close();
-    pc.current = null;
-    dc.current = null;
+    peerConnections.current.forEach(pc => pc.close());
+    peerConnections.current.clear();
+    dataChannels.current.forEach(dc => dc.close());
+    dataChannels.current.clear();
     processedCandidates.current.clear();
+    incomingChunks.current.clear();
+    lastHeartbeat.current.clear();
+    if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
+    
     setSyncStatus('disconnected');
     setSyncCode(null);
+    setActivePeers([]);
   }, []);
 
-  // --- Data Channel Logic ---
+  // --- Data Channel Logic (Chunking & Heartbeat) ---
 
-  const setupDataChannel = useCallback((channel) => {
-    dc.current = channel;
-    
-    channel.onopen = () => {
-      setSyncStatus('connected');
-      // Send current state immediately on connect
-      sendSyncData(true);
-    };
-    
-    channel.onclose = () => setSyncStatus('disconnected');
-    
-    channel.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'SYNC_UPDATE') {
-          handleRemoteUpdate(data);
-        }
-      } catch (e) {
-        console.error("Sync parse error", e);
+  const handleDataMessage = useCallback((peerId, event) => {
+    try {
+      const msg = JSON.parse(event.data);
+
+      // 1. Heartbeat
+      if (msg.type === 'PING') {
+        dataChannels.current.get(peerId)?.send(JSON.stringify({ type: 'PONG' }));
+        lastHeartbeat.current.set(peerId, Date.now());
+        return;
       }
-    };
-  }, [events, classColors, hiddenClasses]); // Dependencies might trigger re-binds but needed for closure capture if not careful, actually sendSyncData uses latest
+      if (msg.type === 'PONG') {
+        lastHeartbeat.current.set(peerId, Date.now());
+        return;
+      }
+
+      // 2. Chunking Logic
+      if (msg.type === 'CHUNK') {
+        if (!incomingChunks.current.has(peerId)) {
+          incomingChunks.current.set(peerId, { chunks: new Array(msg.total), count: 0 });
+        }
+        
+        const transfer = incomingChunks.current.get(peerId);
+        transfer.chunks[msg.index] = msg.data;
+        transfer.count++;
+
+        if (transfer.count === msg.total) {
+          // All chunks received, reassemble
+          const fullData = transfer.chunks.join('');
+          incomingChunks.current.delete(peerId);
+          handleRemoteUpdate(JSON.parse(fullData));
+        }
+        return;
+      }
+
+      // 3. Normal Message
+      if (msg.type === 'SYNC_UPDATE') {
+        handleRemoteUpdate(msg);
+      }
+
+    } catch (e) {
+      console.error("Sync parse error", e);
+    }
+  }, [syncWithRemote]);
 
   const handleRemoteUpdate = (data) => {
-    isRemoteUpdate.current = true;
-
-    // CRITICAL: Equality check to prevent infinite loops.
-    // We only update state if the incoming data is actually different.
-    let hasChanges = false;
-
-    if (JSON.stringify(data.events) !== JSON.stringify(events)) {
-       setEvents(data.events);
-       hasChanges = true;
+    // Use Context's smart sync logic
+    if (syncWithRemote) {
+        syncWithRemote(data);
     }
-    if (JSON.stringify(data.classColors) !== JSON.stringify(classColors)) {
-       setClassColors(data.classColors);
-       hasChanges = true;
-    }
-    if (JSON.stringify(data.hiddenClasses) !== JSON.stringify(hiddenClasses)) {
-       setHiddenClasses(data.hiddenClasses);
-       hasChanges = true;
-    }
-
-    // Release the lock after a safe delay
-    setTimeout(() => { isRemoteUpdate.current = false; }, 300);
   };
 
-  const sendSyncData = (force = false) => {
-    if (!dc.current || dc.current.readyState !== 'open') return;
-    
-    // If this change came from a remote update, do NOT echo it back.
-    if (isRemoteUpdate.current && !force) return;
+  const sendToPeer = (peerId, payload) => {
+    const channel = dataChannels.current.get(peerId);
+    if (!channel || channel.readyState !== 'open') return;
 
-    const payload = JSON.stringify({
+    const json = JSON.stringify(payload);
+    
+    // Check if we need chunking
+    if (json.length > CHUNK_SIZE) {
+        const total = Math.ceil(json.length / CHUNK_SIZE);
+        for (let i = 0; i < total; i++) {
+            const chunk = json.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+            channel.send(JSON.stringify({
+                type: 'CHUNK',
+                index: i,
+                total: total,
+                data: chunk
+            }));
+        }
+    } else {
+        channel.send(json);
+    }
+  };
+
+  const broadcastSyncData = useCallback((force = false) => {
+    const payload = {
       type: 'SYNC_UPDATE',
       events,
       classColors,
       hiddenClasses,
+      changeLog, 
       timestamp: Date.now()
-    });
+    };
 
-    try {
-      dc.current.send(payload);
-    } catch (e) {
-      console.error("Failed to send sync data", e);
+    dataChannels.current.forEach((_, peerId) => {
+        sendToPeer(peerId, payload);
+    });
+  }, [events, classColors, hiddenClasses, changeLog]);
+
+  // Auto-send when logs change
+  useEffect(() => {
+    // Debounce slightly to avoid flood
+    const t = setTimeout(() => broadcastSyncData(), 100);
+    return () => clearTimeout(t);
+  }, [broadcastSyncData]);
+
+  // --- Heartbeat Monitor ---
+  useEffect(() => {
+    heartbeatTimer.current = setInterval(() => {
+        const now = Date.now();
+        dataChannels.current.forEach((dc, peerId) => {
+            if (dc.readyState === 'open') {
+                dc.send(JSON.stringify({ type: 'PING' }));
+                
+                // Check for timeout
+                const last = lastHeartbeat.current.get(peerId) || now;
+                if (now - last > CONNECTION_TIMEOUT) {
+                    console.warn(`Peer ${peerId} timed out. Closing.`);
+                    dc.close();
+                    peerConnections.current.get(peerId)?.close();
+                    // Cleanup maps
+                    dataChannels.current.delete(peerId);
+                    peerConnections.current.delete(peerId);
+                    setActivePeers(prev => prev.filter(p => p !== peerId));
+                }
+            }
+        });
+    }, HEARTBEAT_INTERVAL);
+
+    return () => clearInterval(heartbeatTimer.current);
+  }, []);
+
+
+  // --- WebRTC Connection Factory ---
+
+  const createPeerConnection = (peerId, initiator) => {
+    if (peerConnections.current.has(peerId)) return peerConnections.current.get(peerId);
+
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    peerConnections.current.set(peerId, pc);
+    lastHeartbeat.current.set(peerId, Date.now()); // Initialize heartbeat
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        // Send candidate to signaling
+        const coll = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', syncCode, 'candidates');
+        addDoc(coll, {
+           target: peerId,
+           sender: user.uid,
+           candidate: JSON.stringify(event.candidate)
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+             if (!activePeers.includes(peerId)) setActivePeers(prev => [...prev, peerId]);
+             setSyncStatus('connected');
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+             setActivePeers(prev => prev.filter(p => p !== peerId));
+             if (activePeers.length === 0) setSyncStatus('connecting'); // Revert to connecting if lost all
+        }
+    };
+
+    if (initiator) {
+        const channel = pc.createDataChannel("planner_sync");
+        setupChannel(peerId, channel);
+    } else {
+        pc.ondatachannel = (e) => {
+            setupChannel(peerId, e.channel);
+        };
     }
+
+    return pc;
   };
 
-  // Auto-send when local state changes
-  useEffect(() => {
-    sendSyncData();
-  }, [events, classColors, hiddenClasses]);
+  const setupChannel = (peerId, channel) => {
+      dataChannels.current.set(peerId, channel);
+      channel.onmessage = (e) => handleDataMessage(peerId, e);
+      channel.onopen = () => {
+          // Send initial state
+          const payload = {
+            type: 'SYNC_UPDATE',
+            events, classColors, hiddenClasses, changeLog, 
+            timestamp: Date.now()
+          };
+          sendToPeer(peerId, payload);
+      };
+  };
 
   // --- Session Management ---
 
-  const createSyncSession = useCallback(async () => {
-    if (!db) return alert("Database connection not established. Please refresh the page.");
-    if (!user) return alert("Signing in... Please wait a moment and try again.");
+  const createSyncSession = useCallback(async (password) => {
+    if (!db || !user) return;
 
     cleanupRTC();
     const code = generateSyncCode();
     setSyncCode(code);
-    setSyncStatus('connecting');
+    setSyncStatus('active'); // Host is always active
     isHost.current = true;
 
-    // 1. Setup PeerConnection
-    pc.current = new RTCPeerConnection(RTC_CONFIG);
-    
-    // 2. Setup Signaling Listeners (ICE)
-    // FIX: Race condition handling. ICE candidates might appear before the 
-    // offer document is created. We use setDoc({merge: true}) to ensure 
-    // the document is created if it's not there yet.
-    pc.current.onicecandidate = (event) => {
-      if (event.candidate) {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'signaling', code);
-        setDoc(docRef, {
-          host_candidates: arrayUnion(JSON.stringify(event.candidate))
-        }, { merge: true }).catch((e) => console.error("Error storing host candidate:", e));
-      }
-    };
-
-    // 3. Create Data Channel (Host creates it)
-    const channel = pc.current.createDataChannel("planner_sync");
-    setupDataChannel(channel);
-
-    // 4. Create Offer
-    const offer = await pc.current.createOffer();
-    await pc.current.setLocalDescription(offer);
-
-    // 5. Write to Signaling
+    // Create Session Doc with Password
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'signaling', code);
     await setDoc(docRef, {
-      offer: JSON.stringify(offer),
       created: Date.now(),
-      hostId: user.uid
-    }, { merge: true }); // Merge to avoid wiping candidates if they arrived first
-
-    // 6. Listen for Answer
-    const unsub = onSnapshot(docRef, (snap) => {
-      if (!snap.exists() || !pc.current) return;
-      const data = snap.data();
-
-      if (!pc.current.currentRemoteDescription && data.answer) {
-        pc.current.setRemoteDescription(JSON.parse(data.answer));
-      }
-
-      if (data.peer_candidates) {
-        data.peer_candidates.forEach(c => {
-          if (!processedCandidates.current.has(c)) {
-            processedCandidates.current.add(c);
-            pc.current.addIceCandidate(JSON.parse(c)).catch(() => {});
-          }
-        });
-      }
+      hostId: user.uid,
+      password: password || '', // Simple password storage (hashing recommended for prod)
+      peers: []
     });
-  }, [db, user, appId, cleanupRTC, setupDataChannel]);
 
-  const joinSyncSession = useCallback(async (code) => {
-    if (!db) return alert("Database connection not established. Please refresh the page.");
-    if (!user) return alert("Signing in... Please wait a moment and try again.");
+    // Listen for joining peers
+    const unsub = onSnapshot(docRef, async (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+        
+        // Check for new peers in the 'peers' array
+        if (data.peers) {
+            data.peers.forEach(async (peerId) => {
+                if (peerId !== user.uid && !peerConnections.current.has(peerId)) {
+                    // Host initiates connection to new peer
+                    const pc = createPeerConnection(peerId, true);
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+
+                    // Send Offer
+                    const offerColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'offers');
+                    await addDoc(offerColl, {
+                        to: peerId,
+                        from: user.uid,
+                        type: 'offer',
+                        sdp: JSON.stringify(offer)
+                    });
+                }
+            });
+        }
+    });
+
+    // Listen for Answers
+    const offerColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'offers');
+    const unsubOffers = onSnapshot(offerColl, (snap) => {
+        snap.docChanges().forEach(async (change) => {
+            if (change.type === 'added') {
+                const data = change.doc.data();
+                if (data.to === user.uid && data.type === 'answer') {
+                    const pc = peerConnections.current.get(data.from);
+                    if (pc && !pc.currentRemoteDescription) {
+                        await pc.setRemoteDescription(JSON.parse(data.sdp));
+                    }
+                }
+            }
+        });
+    });
+
+    // Listen for Candidates
+    const candColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'candidates');
+    const unsubCand = onSnapshot(candColl, (snap) => {
+        snap.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+                const data = change.doc.data();
+                if (data.target === user.uid) {
+                    const pc = peerConnections.current.get(data.sender);
+                    if (pc) pc.addIceCandidate(JSON.parse(data.candidate)).catch(e => {});
+                }
+            }
+        });
+    });
+
+  }, [db, user, appId, cleanupRTC, events, classColors, hiddenClasses, changeLog]); // Deps
+
+  const joinSyncSession = useCallback(async (code, password) => {
+    if (!db || !user) return;
     if (!code) return;
 
     cleanupRTC();
@@ -185,58 +325,71 @@ export const usePlannerSync = (firebaseState, dataState) => {
     setSyncStatus('connecting');
     isHost.current = false;
 
-    // 1. Setup PC
-    pc.current = new RTCPeerConnection(RTC_CONFIG);
-
-    // 2. Handle Data Channel (Guest waits for it)
-    pc.current.ondatachannel = (event) => {
-      setupDataChannel(event.channel);
-    };
-
-    // 3. ICE Candidates
-    pc.current.onicecandidate = (event) => {
-      if (event.candidate) {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'signaling', code);
-        // Robustness: Ensure doc exists or merge nicely
-        setDoc(docRef, {
-          peer_candidates: arrayUnion(JSON.stringify(event.candidate))
-        }, { merge: true }).catch((e) => console.error("Error storing peer candidate:", e));
-      }
-    };
-
-    // 4. Read Offer & Answer
+    // 1. Verify Session & Password
     const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'signaling', code);
-    const unsub = onSnapshot(docRef, async (snap) => {
-      if (!snap.exists() || !pc.current) return;
-      const data = snap.data();
+    const snap = await getDoc(docRef);
+    
+    if (!snap.exists()) {
+        alert("Session not found");
+        return;
+    }
+    
+    const sessionData = snap.data();
+    if (sessionData.password && sessionData.password !== password) {
+        alert("Invalid Password");
+        setSyncStatus('disconnected');
+        return;
+    }
 
-      // Handle Offer
-      if (!pc.current.currentRemoteDescription && data.offer) {
-        await pc.current.setRemoteDescription(JSON.parse(data.offer));
-        const answer = await pc.current.createAnswer();
-        await pc.current.setLocalDescription(answer);
-        
-        await updateDoc(docRef, {
-          answer: JSON.stringify(answer),
-          peerId: user.uid
-        });
-      }
-
-      // Handle Host Candidates
-      if (data.host_candidates) {
-        data.host_candidates.forEach(c => {
-          if (!processedCandidates.current.has(c)) {
-            processedCandidates.current.add(c);
-            pc.current.addIceCandidate(JSON.parse(c)).catch(() => {});
-          }
-        });
-      }
+    // 2. Announce Presence
+    await updateDoc(docRef, {
+        peers: arrayUnion(user.uid)
     });
-  }, [db, user, appId, cleanupRTC, setupDataChannel]);
+
+    // 3. Listen for Offers
+    const offerColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'offers');
+    const unsubOffers = onSnapshot(offerColl, (snap) => {
+        snap.docChanges().forEach(async (change) => {
+            if (change.type === 'added') {
+                const data = change.doc.data();
+                if (data.to === user.uid && data.type === 'offer') {
+                    const pc = createPeerConnection(data.from, false);
+                    await pc.setRemoteDescription(JSON.parse(data.sdp));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+
+                    // Send Answer
+                    await addDoc(offerColl, {
+                        to: data.from,
+                        from: user.uid,
+                        type: 'answer',
+                        sdp: JSON.stringify(answer)
+                    });
+                }
+            }
+        });
+    });
+
+    // 4. Listen for Candidates
+    const candColl = collection(db, 'artifacts', appId, 'public', 'data', 'signaling', code, 'candidates');
+    const unsubCand = onSnapshot(candColl, (snap) => {
+        snap.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+                const data = change.doc.data();
+                if (data.target === user.uid) {
+                    const pc = peerConnections.current.get(data.sender);
+                    if (pc) pc.addIceCandidate(JSON.parse(data.candidate)).catch(e => {});
+                }
+            }
+        });
+    });
+
+  }, [db, user, appId, cleanupRTC, events, classColors, hiddenClasses, changeLog]);
 
   return {
     syncCode,
     syncStatus,
+    activePeersCount: activePeers.length,
     createSyncSession,
     joinSyncSession,
     leaveSyncSession: cleanupRTC
