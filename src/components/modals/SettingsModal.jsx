@@ -9,7 +9,9 @@ import {
   Upload,
   FileJson,
   FileCode,
-  ChevronDown
+  ChevronDown,
+  CalendarX,
+  Calendar
 } from "lucide-react";
 import Modal from "../ui/Modal";
 import { useEvents } from "../../context/PlannerContext";
@@ -24,32 +26,55 @@ import "prismjs/themes/prism-tomorrow.css";
 const Editor = CodeEditor.default || CodeEditor;
 
 // ==========================================
-// Helper: Collapsible Card (Stateless)
-// Now controlled by the parent component
+// Helper: Collapsible Card (Stateful & Adaptive)
 // ==========================================
-const CollapsibleCard = ({ title, icon: Icon, children, isOpen, onToggle, className = "" }) => {
+const CollapsibleCard = ({ title, icon: Icon, children, className = "" }) => {
+  // RESTORED: Internal state for independence
+  const [isOpen, setIsOpen] = useState(false);
+
+  // LOGIC: Adjust min-width based on state
+  // If Open: Wider (300px) to fit content.
+  // If Closed: Narrower (200px) to fit more tiles in a row.
+  const sizeClasses = isOpen 
+    ? "min-w-[300px] ring-2 ring-blue-500/10 dark:ring-blue-400/10" 
+    : "min-w-[200px]";
+
   return (
-    <div className={`bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-100 dark:border-slate-600 overflow-hidden ${className}`}>
+    <div 
+      className={`
+        bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-100 dark:border-slate-600 overflow-hidden 
+        transition-all duration-300 ease-in-out flex-1
+        ${sizeClasses}
+        ${className}
+      `}
+    >
       <button
-        onClick={onToggle}
+        onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
       >
-        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+        <span className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
           <Icon className={`w-4 h-4 ${isOpen ? 'text-blue-500' : 'text-slate-400'}`} /> 
           {title}
         </span>
         <ChevronDown 
-          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
+          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
         />
       </button>
       
-      {isOpen && (
-        <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-600/50 animate-in slide-in-from-top-2 duration-200">
-          <div className="pt-4">
-            {children}
+      {/* Using a grid transition trick for smooth height animation 
+        (optional, but feels nicer with width changes)
+      */}
+      <div 
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="overflow-hidden">
+          <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-600/50">
+            <div className="pt-4">
+              {children}
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
@@ -68,7 +93,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal }) => {
 
     try {
       const text = await file.text();
-      const result = processor(text, true);
+      const result = processor(text, true); // true = append
       if (result.success) {
         alert(`Successfully added ${result.count} events.`);
         onCloseModal();
@@ -180,6 +205,96 @@ const MergeContent = ({
       >
         Merge Classes
       </button>
+    </div>
+  );
+};
+
+// ==========================================
+// Sub-Component: Date Cleaner Content
+// ==========================================
+const DateCleanerContent = ({ onCloseModal }) => {
+  const { events, importJsonData } = useEvents();
+  const [beforeDate, setBeforeDate] = useState("");
+  const [afterDate, setAfterDate] = useState("");
+
+  const handleDelete = (mode) => {
+    const targetDate = mode === "before" ? beforeDate : afterDate;
+    if (!targetDate) return;
+
+    if (!window.confirm(`Are you sure you want to delete all events ${mode} ${targetDate}?`)) {
+      return;
+    }
+
+    const targetTime = new Date(targetDate).getTime();
+    const newEvents = {};
+    let deletedCount = 0;
+
+    Object.keys(events).forEach(dateKey => {
+      const eventTime = new Date(dateKey).getTime();
+      
+      let shouldKeep = true;
+      if (mode === "before" && eventTime < targetTime) shouldKeep = false;
+      if (mode === "after" && eventTime > targetTime) shouldKeep = false;
+
+      if (shouldKeep) {
+        newEvents[dateKey] = events[dateKey];
+      } else {
+        deletedCount++;
+      }
+    });
+
+    if (deletedCount > 0) {
+      importJsonData(JSON.stringify(newEvents), false);
+      alert(`Deleted events from ${deletedCount} days.`);
+      onCloseModal();
+    } else {
+      alert("No events found in that range.");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Delete Before</label>
+        <div className="flex gap-2">
+          <input 
+            type="date" 
+            value={beforeDate}
+            onChange={(e) => setBeforeDate(e.target.value)}
+            className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white"
+          />
+          <button
+            onClick={() => handleDelete("before")}
+            disabled={!beforeDate}
+            className="p-2 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-lg disabled:opacity-50 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Delete After</label>
+        <div className="flex gap-2">
+          <input 
+            type="date" 
+            value={afterDate}
+            onChange={(e) => setAfterDate(e.target.value)}
+            className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white"
+          />
+          <button
+            onClick={() => handleDelete("after")}
+            disabled={!afterDate}
+            className="p-2 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-lg disabled:opacity-50 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      
+      <p className="text-[10px] text-slate-400 text-center leading-tight pt-1">
+        This action is permanent.
+      </p>
     </div>
   );
 };
@@ -302,9 +417,6 @@ const SettingsModal = ({
   handleICSExport,
 }) => {
   const { events } = useEvents();
-  
-  // NEW: Lifted state to control both cards simultaneously
-  const [toolsOpen, setToolsOpen] = useState(false);
 
   useEffect(() => {
     if (showJsonEdit) {
@@ -317,7 +429,6 @@ const SettingsModal = ({
       <Modal isOpen={isOpen} onClose={onClose} title="Data Management">
         <div className="space-y-6">
 
-          {/* Top Section: Class List */}
           <ClassManager
             classColors={classColors}
             setClassColors={setClassColors}
@@ -326,13 +437,12 @@ const SettingsModal = ({
           
           <div className="border-t border-slate-100 dark:border-slate-700" />
 
-          {/* Middle Section: Tools (Synchronized Toggle) */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Tools Grid using Flex-Wrap */}
+          <div className="flex flex-wrap gap-4 align-top">
+            
             <CollapsibleCard 
               title="Import Data" 
               icon={Upload}
-              isOpen={toolsOpen}
-              onToggle={() => setToolsOpen(!toolsOpen)}
             >
               <ImportContent 
                 onOpenJsonEditor={() => setShowJsonEdit(true)} 
@@ -343,8 +453,6 @@ const SettingsModal = ({
             <CollapsibleCard 
               title="Merge Classes" 
               icon={Merge}
-              isOpen={toolsOpen}
-              onToggle={() => setToolsOpen(!toolsOpen)}
             >
               <MergeContent
                 classOptions={Object.keys(classColors)}
@@ -355,11 +463,18 @@ const SettingsModal = ({
                 onMerge={mergeClasses}
               />
             </CollapsibleCard>
+
+            <CollapsibleCard 
+              title="Clean Dates" 
+              icon={CalendarX}
+            >
+              <DateCleanerContent onCloseModal={onClose} />
+            </CollapsibleCard>
+
           </div>
 
           <div className="border-t border-slate-100 dark:border-slate-700" />
 
-          {/* Bottom Section: Footer Actions */}
           <div className="space-y-2">
             <button
               onClick={handleICSExport}
