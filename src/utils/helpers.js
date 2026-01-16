@@ -108,7 +108,6 @@ export const determineType = (summary, description) => {
   // Changed to 'Event' to cover generic calendar items better than 'Assignment'
   return 'Event';
 };
-
 export const determineClass = (location, summary) => {
   // Helper to validate if a string looks like a real class name
   const isValidName = (name) => {
@@ -124,8 +123,13 @@ export const determineClass = (location, summary) => {
   // whereas summary contains the "Content" (Event Name like 'Exam 1')
   const candidates = [location, summary];
 
-  for (let text of candidates) {
-    if (!text) continue;
+  for (let rawText of candidates) {
+    if (!rawText) continue;
+
+    // --- FIX START ---
+    // Force conversion to String to prevent "replace is not a function" on numbers/objects
+    const text = String(rawText); 
+    // --- FIX END ---
 
     // 1. Clean up "Zoom" clutter to reveal the course info inside
     // Ex: "Zoom Online Meeting (MECE.102 - Mechanics)" -> "(MECE.102 - Mechanics)"
