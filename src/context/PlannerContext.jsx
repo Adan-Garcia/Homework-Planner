@@ -4,6 +4,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import { STORAGE_KEYS } from "../utils/constants";
 import {
@@ -62,7 +63,7 @@ export const EventProvider = ({ children }) => {
   const [roomId, setRoomId] = useState(null);
   const [roomPassword, setRoomPassword] = useState("");
 
-  // 3. Persistence
+  // 3. Persistence (Local Storage)
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
   }, [events]);
@@ -86,58 +87,66 @@ export const EventProvider = ({ children }) => {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // --- 5. MODULAR SYNC INTEGRATION ---
+  // --- 5. SINGLE-DOC SYNC INTEGRATION ---
 
-  // A. Room Authentication
   const { isAuthorized, isHost, authError, peers } = useRoomAuth(
     roomId,
     roomPassword,
     user,
   );
 
-  // B. Data Sync
-  // Note: We do NOT pass 'events' as a dependency. Sync is purely event-driven now.
-  const { syncAction } = useFirestoreSync(
+  const { syncAction, syncColors, destroyRoomData } = useFirestoreSync(
     roomId,
+    roomPassword,
     isAuthorized,
     setEvents,
     setClassColors,
+    events,
   );
 
-  // 6. Event Dispatcher (The "Brain" of the operation)
-  // This handles Optimistic Updates (Local) + Sync (Remote)
-  const dispatchCalEvent = useCallback(
-    (type, payload) => {
-      // 1. Optimistic Update
-      setEvents((prev) => {
-        if (type === "ADD") return [...prev, payload];
-        if (type === "UPDATE")
-          return prev.map((e) => (e.id === payload.id ? payload : e));
-        if (type === "DELETE") return prev.filter((e) => e.id !== payload);
-        if (type === "BULK") return payload;
-        return prev;
-      });
+  // 6. AUTO-SYNC LOGIC (Debounced)
+  // This replaces the manual sync calls. Whenever 'events' changes, we schedule a sync.
+  const syncTimeoutRef = useRef(null);
 
-      // 2. Remote Sync
-      if (roomId && isAuthorized) {
-        syncAction(type, payload);
-      }
-    },
-    [roomId, isAuthorized, syncAction],
-  );
+  useEffect(() => {
+    if (roomId && isAuthorized) {
+      // Clear previous pending sync
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+
+      // Wait 2 seconds of inactivity, then send the FULL state
+      syncTimeoutRef.current = setTimeout(() => {
+        syncAction(events);
+      }, 2000);
+    }
+    return () => clearTimeout(syncTimeoutRef.current);
+  }, [events, roomId, isAuthorized, syncAction]);
+
+  // 7. Event Dispatcher (Purely Local Updates)
+  // We no longer call syncAction here directly. The useEffect above handles it.
+  const dispatchCalEvent = useCallback((type, payload) => {
+    setEvents((prev) => {
+      if (type === "ADD") return [...prev, payload];
+      if (type === "UPDATE")
+        return prev.map((e) => (e.id === payload.id ? payload : e));
+      if (type === "DELETE") return prev.filter((e) => e.id !== payload);
+      if (type === "BULK") return payload;
+      return prev;
+    });
+  }, []);
 
   // Wrapper for Color Updates
   const handleSetClassColors = useCallback(
     (newColors) => {
       setClassColors(newColors);
+      // Sync colors immediately as they change rarely
       if (roomId && isAuthorized) {
-        syncAction("COLORS", newColors);
+        syncColors(newColors);
       }
     },
-    [roomId, isAuthorized, syncAction],
+    [roomId, isAuthorized, syncColors],
   );
 
-  // 7. ICS Processing
+  // 8. ICS Processing
   const processICSContent = useCallback(
     (text) => {
       try {
@@ -206,26 +215,10 @@ export const EventProvider = ({ children }) => {
           }
         });
 
-        // Use our new handlers
         handleSetClassColors(finalColors);
 
-        // Append new events instead of replacing
-        setEvents((prev) => {
-          const combined = [...prev, ...newEvents];
-          if (roomId && isAuthorized) syncAction("BULK", combined); // Sync full list just to be safe or sync new items
-          return combined;
-        });
-
-        // Note: For cleaner sync, we should ideally loop ADD, but BULK is fine for now
-        // if the hook handles it efficiently.
-        if (roomId && isAuthorized) {
-          // We prefer syncing just the new ones if possible, but BULK is safer for consistency
-          // if we treat the client as authoritative for this import action.
-          // However, to be polite to bandwidth, let's just add them.
-          // Actually, 'BULK' in hook uses batch.set, so passing just newEvents is better?
-          // The hook implementation of BULK iterates the payload.
-          syncAction("BULK", newEvents);
-        }
+        // Update Local State (Effect will handle sync)
+        setEvents((prev) => [...prev, ...newEvents]);
 
         return { success: true, count: newEvents.length };
       } catch (e) {
@@ -233,44 +226,25 @@ export const EventProvider = ({ children }) => {
         return { success: false, error: e.message };
       }
     },
-    [classColors, roomId, isAuthorized, syncAction, handleSetClassColors],
+    [classColors, handleSetClassColors],
   );
 
-  // 8. JSON Import
-  const importJsonData = useCallback(
-    (jsonString, append = false) => {
-      try {
-        const data = JSON.parse(jsonString);
-        if (Array.isArray(data)) {
-          // Update Local
-          const newEventList = append ? [...events, ...data] : data;
-          setEvents(newEventList);
-
-          // Update Colors (simplified logic for brevity, assumed consistent)
-          // ... in a real refactor we'd extract color logic
-
-          // Sync
-          if (roomId && isAuthorized) {
-            // If append, sync just the new ones. If replace, we might need a clearer signal.
-            // For now, we will just sync the specific items involved.
-            syncAction("BULK", data);
-            // Note: If we replaced (append=false), we technically need to delete old ones
-            // on server which BULK doesn't do.
-            // For this specific refactor step, we'll assume append-like behavior for safety,
-            // or leave as is. To truly replace on server, we'd need a "CLEAR" action.
-          }
-          return { success: true };
-        }
-        return { success: false, error: "Invalid JSON format" };
-      } catch (e) {
-        console.error("JSON Import failed", e);
-        return { success: false, error: e.message };
+  // 9. JSON Import
+  const importJsonData = useCallback((jsonString, append = false) => {
+    try {
+      const data = JSON.parse(jsonString);
+      if (Array.isArray(data)) {
+        setEvents((prev) => (append ? [...prev, ...data] : data));
+        return { success: true };
       }
-    },
-    [events, roomId, isAuthorized, syncAction],
-  );
+      return { success: false, error: "Invalid JSON format" };
+    } catch (e) {
+      console.error("JSON Import failed", e);
+      return { success: false, error: e.message };
+    }
+  }, []);
 
-  // 9. Actions
+  // 10. Actions
   const addEvent = (event) => dispatchCalEvent("ADD", event);
   const updateEvent = (event) => dispatchCalEvent("UPDATE", event);
   const deleteEvent = (id) => dispatchCalEvent("DELETE", id);
@@ -289,28 +263,13 @@ export const EventProvider = ({ children }) => {
   };
 
   const mergeClasses = (source, target) => {
-    // 1. Update events
     const updatedEvents = events.map((e) =>
       e.class === source ? { ...e, class: target } : e,
     );
-    // Find just the changed ones to sync efficiently
-    const changedEvents = updatedEvents.filter(
-      (e) =>
-        e.class === target &&
-        events.find((old) => old.id === e.id && old.class === source),
-    );
-
     setEvents(updatedEvents);
-
-    // 2. Update colors
     const newColors = { ...classColors };
     delete newColors[source];
     handleSetClassColors(newColors);
-
-    // 3. Sync changes
-    if (roomId && isAuthorized) {
-      syncAction("BULK", changedEvents);
-    }
   };
 
   const renameClass = (oldName, newName) => {
@@ -319,22 +278,12 @@ export const EventProvider = ({ children }) => {
     const updatedEvents = events.map((e) =>
       e.class === oldName ? { ...e, class: newName } : e,
     );
-    const changedEvents = updatedEvents.filter(
-      (e) =>
-        e.class === newName &&
-        events.find((old) => old.id === e.id && old.class === oldName),
-    );
-
     setEvents(updatedEvents);
 
     const next = { ...classColors };
     next[newName] = next[oldName];
     delete next[oldName];
     handleSetClassColors(next);
-
-    if (roomId && isAuthorized) {
-      syncAction("BULK", changedEvents);
-    }
   };
 
   const resetAllData = () => {
@@ -342,7 +291,6 @@ export const EventProvider = ({ children }) => {
     setClassColors({});
     setHiddenClasses([]);
     localStorage.removeItem(STORAGE_KEYS.EVENTS);
-    // Note: This does NOT clear the server data currently, for safety.
   };
 
   const exportICS = () => {
@@ -354,6 +302,14 @@ export const EventProvider = ({ children }) => {
     a.download = "planner.ics";
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const disconnectRoom = async () => {
+    if (roomId && isHost) {
+      await destroyRoomData();
+    }
+    setRoomId(null);
+    setRoomPassword("");
   };
 
   return (
@@ -384,7 +340,9 @@ export const EventProvider = ({ children }) => {
         setRoomPassword,
         syncError: authError,
         isHost,
-        peers, // Exposed to UI
+        peers,
+        disconnectRoom,
+        destroyRoomData,
       }}
     >
       {children}
