@@ -10,8 +10,9 @@ import {
   Rows,
   AlignLeft,
 } from "lucide-react";
-import { useUI, EventProvider, UIProvider } from "./context/PlannerContext";
-import useData from "./context/DataContext";
+import { useUI, UIProvider } from "./context/PlannerContext";
+import { useData, DataProvider } from "./context/DataContext";
+import { AuthProvider } from "./context/AuthContext"; // Added AuthProvider import
 import SetupScreen from "./components/setup/SetupScreen";
 import Sidebar from "./components/planner/Sidebar";
 import CalendarView from "./components/planner/CalendarView";
@@ -327,10 +328,12 @@ function PlannerApp() {
 
 export default function App() {
   return (
-    <EventProvider>
-      <UIProvider>
-        <PlannerApp />
-      </UIProvider>
-    </EventProvider>
+    <AuthProvider>
+      <DataProvider>
+        <UIProvider>
+          <PlannerApp />
+        </UIProvider>
+      </DataProvider>
+    </AuthProvider>
   );
 }
