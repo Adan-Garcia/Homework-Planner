@@ -116,3 +116,21 @@ export const decryptEvent = async (encryptedData, key) => {
     };
   }
 };
+export const createAccessChallenge = async (password, roomId) => {
+  const key = await deriveKey(password, roomId);
+  // Encrypt a simple validation token
+  return encryptEvent({ challenge: "ACCESS_OK" }, key);
+};
+export const verifyAccessChallenge = async (
+  password,
+  roomId,
+  encryptedChallenge,
+) => {
+  try {
+    const key = await deriveKey(password, roomId);
+    const decrypted = await decryptEvent(encryptedChallenge, key);
+    return decrypted.challenge === "ACCESS_OK";
+  } catch (e) {
+    return false;
+  }
+};

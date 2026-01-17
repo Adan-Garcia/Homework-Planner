@@ -10,7 +10,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db, appId } from "../utils/firebase";
-import { hashPassword } from "../utils/crypto";
+import { createAccessChallenge, verifyAccessChallenge } from "../utils/crypto";
 
 export const useRoomAuth = (roomId, roomPassword, user) => {
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -52,25 +52,32 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
     const connectToRoom = async () => {
       try {
         const snapshot = await getDoc(roomRef);
-        const currentHash = await hashPassword(roomPassword || "", roomId);
 
         // 1. Validate or Create Room
         if (!snapshot.exists()) {
-          // Room doesn't exist -> Create it -> User becomes Host
-          // Store HASH, not plaintext password
+          // Room doesn't exist -> Create it with a Challenge
+          const challenge = await createAccessChallenge(roomPassword, roomId);
+
           await setDoc(roomRef, {
             created: serverTimestamp(),
             hostId: user.uid,
-            passwordHash: currentHash,
+            authChallenge: challenge, // Store this instead of passwordHash
             classColors: {},
           });
           setIsHost(true);
           setIsAuthorized(true);
         } else {
-          // Room exists -> Validate Password Hash
+          // Room exists -> Verify using the Challenge
           const data = snapshot.data();
 
-          if (data.passwordHash && data.passwordHash !== currentHash) {
+          // Check if authorized
+          const isValid = await verifyAccessChallenge(
+            roomPassword || "",
+            roomId,
+            data.authChallenge,
+          );
+
+          if (!isValid) {
             setAuthError("Incorrect Room Password");
             setIsAuthorized(false);
             return;
