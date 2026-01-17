@@ -60,6 +60,7 @@ const Sidebar = ({
     const done = filteredEvents.filter(t => t.completed).sort((a,b) => new Date(b.date) - new Date(a.date));
 
     active.forEach(task => {
+      if (!task.date) return;
       const [y, m, d] = task.date.split('-').map(Number);
       const taskDate = new Date(y, m - 1, d);
       if (taskDate < today) groups.overdue.push(task);

@@ -52,8 +52,6 @@ export const EventProvider = ({ children }) => {
   // --- ICS Processing ---
   const processICSContent = useCallback((text) => {
     try {
-      
-      // FIX: Pass the raw string to unfoldLines, THEN split
       const unfolded = unfoldLines(text); 
       const lines = unfolded.split(/\r\n|\n|\r/);
       
@@ -61,7 +59,6 @@ export const EventProvider = ({ children }) => {
       let currentEvent = null;
       let inEvent = false;
 
-      // Temporary map to track new classes found in this import
       const foundClasses = new Set();
 
       for (const line of lines) {
@@ -70,7 +67,6 @@ export const EventProvider = ({ children }) => {
           currentEvent = {};
         } else if (line.startsWith("END:VEVENT")) {
           if (currentEvent) {
-            // --- FIX 1: Pass specific properties, not the whole object ---
             const type = determineType(currentEvent.title, currentEvent.description);
             const className = determineClass(currentEvent.location, currentEvent.title);
             
@@ -78,7 +74,6 @@ export const EventProvider = ({ children }) => {
             currentEvent.class = className;
             currentEvent.color = PALETTE[type] || PALETTE.other;
             
-            // Track class for color assignment
             if (className) foundClasses.add(className);
 
             if (!currentEvent.id) currentEvent.id = (Date.now().toString(36) + Math.random().toString(36).substr(2, 5))
@@ -89,15 +84,13 @@ export const EventProvider = ({ children }) => {
         } else if (inEvent) {
           const [key, ...valueParts] = line.split(":");
           const value = valueParts.join(":");
-          if (key.includes("DTSTART")) currentEvent.start = parseICSDate(value);
-          if (key.includes("DTEND")) currentEvent.end = parseICSDate(value);
+          if (key.includes("DTSTART")) currentEvent.date = parseICSDate(value);
           if (key.includes("SUMMARY")) currentEvent.title = value;
           if (key.includes("LOCATION")) currentEvent.location = value;
           if (key.includes("DESCRIPTION")) currentEvent.description = value;
         }
       }
 
-      // --- FIX 2: Update classColors for any new classes ---
       setClassColors(prevColors => {
         const updatedColors = { ...prevColors };
         const defaultPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
@@ -112,15 +105,7 @@ export const EventProvider = ({ children }) => {
         return updatedColors;
       });
 
-      setEvents(prev => [...prev, ...newEvents]); // Append instead of replace? Or replace? 
-      // The original code used setEvents(newEvents), which replaces all. 
-      // If you want to append, use: setEvents(prev => [...prev, ...newEvents]);
-      // Keeping original behavior (replace) for now, but usually import implies append. 
-      // User's previous code used `setEvents(newEvents)`. 
-      // I will switch to APPEND as it is safer for "Import".
       setEvents(prev => {
-         // Prevent duplicates based on ID or simple properties if needed, 
-         // but for now we just append to ensure data shows up.
          return [...prev, ...newEvents];
       });
 
@@ -131,9 +116,9 @@ export const EventProvider = ({ children }) => {
     }
   }, []);
 
-  const openTaskModal = () => {}; // Helper placeholder
+  const openTaskModal = () => {}; 
 
-  // --- NEW: Collaboration State ---
+  // --- Collaboration State ---
   const [user, setUser] = useState(null);
   const [roomId, setRoomId] = useState(null);
 
@@ -156,17 +141,42 @@ export const EventProvider = ({ children }) => {
       if (type === 'ADD') return [...prev, payload];
       if (type === 'UPDATE') return prev.map(e => e.id === payload.id ? payload : e);
       if (type === 'DELETE') return prev.filter(e => e.id !== payload);
-      if (type === 'BULK') return payload; // Handle Bulk updates
+      if (type === 'BULK') return payload; 
       return prev;
     });
     syncAction(type, payload);
   };
 
-  // --- NEW: Data Helper Wrappers ---
+  // --- Data Helper Wrappers ---
   const addEvent = (event) => dispatchCalEvent('ADD', event);
   const updateEvent = (event) => dispatchCalEvent('UPDATE', event);
   const deleteEvent = (id) => dispatchCalEvent('DELETE', id);
   
+  // FIX: Added missing toggle function that is used in Sidebar/App
+  const toggleTaskCompletion = (id) => {
+    setEvents(prev => {
+      const task = prev.find(e => e.id === id);
+      if (task) {
+         const updatedTask = { ...task, completed: !task.completed };
+         // We can reuse dispatch logic or manually update
+         // Using dispatch ensures sync
+         // But we need to do it outside the reducer to avoid side effects inside reducer if we were calling dispatch there.
+         // Here we are inside the toggle function, so we can calculate the new state.
+         // However, dispatchCalEvent expects a payload. 
+         // Let's just find and update.
+         // Better approach: call dispatchCalEvent directly
+         return prev; // Return prev here and call dispatch below to avoid complexity
+      }
+      return prev;
+    });
+    
+    // Actually, just find the task and call updateEvent
+    const task = events.find(e => e.id === id);
+    if (task) {
+        updateEvent({ ...task, completed: !task.completed });
+    }
+  };
+
   const resetAllData = () => {
     dispatchCalEvent('BULK', []);
     localStorage.removeItem(STORAGE_KEYS.EVENTS);
@@ -180,7 +190,6 @@ export const EventProvider = ({ children }) => {
       if (Array.isArray(data)) {
         dispatchCalEvent('BULK', append ? [...events, ...data] : data);
         
-        // Ensure colors exist for imported JSON data
         const uniqueClasses = new Set(data.map(e => e.class).filter(Boolean));
         setClassColors(prev => {
             const next = { ...prev };
@@ -215,7 +224,6 @@ export const EventProvider = ({ children }) => {
     URL.revokeObjectURL(url);
   };
 
-  // Helper placeholders for class management (connect these to state if needed)
   const deleteClass = (className) => {
     const newColors = { ...classColors };
     delete newColors[className];
@@ -225,7 +233,7 @@ export const EventProvider = ({ children }) => {
   const mergeClasses = (source, target) => {
     setEvents(prev => {
       const updated = prev.map(e => e.class === source ? { ...e, class: target } : e);
-      dispatchCalEvent('BULK', updated); // Sync the massive change
+      dispatchCalEvent('BULK', updated); 
       return updated;
     });
     deleteClass(source);
@@ -236,23 +244,22 @@ export const EventProvider = ({ children }) => {
       value={{
         events,
         setEvents,
-        dispatchCalEvent, // Use this for actions you want synced
+        dispatchCalEvent,
         classColors,
         setClassColors,
         hiddenClasses,
         setHiddenClasses,
         processICSContent,
         openTaskModal,
-        // --- Add the missing exports here ---
         addEvent,
         updateEvent,
         deleteEvent,
+        toggleTaskCompletion, // Exported here
         importJsonData,
         exportICS,
         resetAllData,
         deleteClass,
         mergeClasses,
-        // Sync State
         user,
         roomId,
         setRoomId,
@@ -271,7 +278,10 @@ export const UIProvider = ({ children }) => {
   const [view, setView] = useState("setup");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTypeFilter, setActiveTypeFilter] = useState("all");
+  
+  // FIX: Changed default from "all" to "All" to match logic in App.jsx
+  const [activeTypeFilter, setActiveTypeFilter] = useState("All");
+  
   const [showCompleted, setShowCompleted] = useState(true);
   const [hideOverdue, setHideOverdue] = useState(false);
   
