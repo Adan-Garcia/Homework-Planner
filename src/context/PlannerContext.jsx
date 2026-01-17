@@ -17,7 +17,7 @@ import {
 
 // --- HOOKS ---
 import { useRoomAuth } from "../hooks/useRoomAuth.js";
-import { useFirestoreSync } from "../hooks/useFirestoreSync.js";
+import { useSocketSync } from "../hooks/useSocketSync.js";
 
 // --- Context Definitions ---
 const EventContext = createContext();
@@ -100,7 +100,7 @@ export const EventProvider = ({ children }) => {
     deleteEvent: serverDelete,
     syncColors,
     bulkAddEvents,
-  } = useFirestoreSync(
+  } = useSocketSync(
     roomId,
     authToken,
     cryptoKey,

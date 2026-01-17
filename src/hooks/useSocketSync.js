@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import { API_BASE_URL } from "../utils/constants";
 import { encryptEvent, decryptEvent } from "../utils/crypto";
 
-export const useFirestoreSync = (
+export const useSocketSync = (
   roomId,
   authToken,
   cryptoKey,
