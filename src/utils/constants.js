@@ -6,7 +6,8 @@ export const STORAGE_KEYS = {
   VIEW: "hw_view",
   CAL_MODE: "hw_cal_mode",
 };
-
+export const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:3001";
 export const PALETTE = [
   "#0984e3",
   "#d63031",

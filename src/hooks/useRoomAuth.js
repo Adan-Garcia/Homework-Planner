@@ -1,143 +1,92 @@
 import { useState, useEffect } from "react";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-  onSnapshot,
-  collection,
-  query,
-  orderBy,
-} from "firebase/firestore";
-import { db, appId } from "../utils/firebase";
-import { createAccessChallenge, verifyAccessChallenge } from "../utils/crypto";
+import { API_BASE_URL } from "../utils/constants";
+import { deriveKey } from "../utils/crypto";
 
-export const useRoomAuth = (roomId, roomPassword, user) => {
+export const useRoomAuth = (roomId, roomPassword) => {
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isHost, setIsHost] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
+  const [cryptoKey, setCryptoKey] = useState(null);
   const [authError, setAuthError] = useState(null);
-  const [peers, setPeers] = useState([]);
+  const [isNewRoom, setIsNewRoom] = useState(false);
 
   useEffect(() => {
-    // Reset state if inputs are invalid
-    if (!roomId || !user) {
+    // Reset state if inputs are invalid or changed
+    if (!roomId) {
       setIsAuthorized(false);
-      setIsHost(false);
-      setPeers([]);
+      setAuthToken(null);
+      setCryptoKey(null);
+      setAuthError(null);
+      setIsNewRoom(false);
       return;
     }
 
-    setAuthError(null);
+    // Only attempt auth if we have both ID and Password
+    if (!roomPassword) {
+      // Just waiting for password, reset auth state
+      setIsAuthorized(false);
+      return;
+    }
+
     let mounted = true;
-    let unsubscribeRoom = () => {};
-    let unsubscribePeers = () => {};
 
-    const roomRef = doc(
-      db,
-      "artifacts",
-      appId,
-      "public",
-      "data",
-      "rooms",
-      roomId,
-    );
-    const peersRef = collection(
-      db,
-      "artifacts",
-      appId,
-      "public",
-      "data",
-      `rooms_${roomId}_peers`,
-    );
-
-    const connectToRoom = async () => {
+    const authenticate = async () => {
+      setAuthError(null);
       try {
-        const snapshot = await getDoc(roomRef);
-        if (!mounted) return;
-        // 1. Validate or Create Room
-        if (!snapshot.exists()) {
-          // Room doesn't exist -> Create it with a Challenge
-          const challenge = await createAccessChallenge(roomPassword, roomId);
+        // 1. Init: Get Salt
+        const initRes = await fetch(`${API_BASE_URL}/api/auth/init`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId }),
+        });
 
-          await setDoc(roomRef, {
-            created: serverTimestamp(),
-            hostId: user.uid,
-            authChallenge: challenge, // Store this instead of passwordHash
-            classColors: {},
-          });
+        if (!initRes.ok) throw new Error("Failed to initialize room");
+        const { salt, isNew } = await initRes.json();
 
-          if (mounted) {
-            setIsHost(true);
-            setIsAuthorized(true);
-          }
-        } else {
-          // Room exists -> Verify using the Challenge
-          const data = snapshot.data();
+        if (mounted) setIsNewRoom(isNew);
 
-          // Check if authorized
-          const isValid = await verifyAccessChallenge(
-            roomPassword || "",
-            roomId,
-            data.authChallenge,
-          );
+        // 2. Derive Keys
+        // Key 1: For Authentication (String)
+        const authHash = await deriveKey(roomPassword, salt, "AUTH");
+        // Key 2: For Data Encryption (CryptoKey Object) - KEEP PRIVATE
+        const dataKey = await deriveKey(roomPassword, salt, "DATA");
 
-          if (!isValid) {
-            if (mounted) {
-              setAuthError("Incorrect Room Password");
-              setIsAuthorized(false);
-            }
-            return;
-          }
-          if (mounted) {
-            setIsHost(data.hostId === user.uid);
-            setIsAuthorized(true);
-          }
+        // 3. Login / Register
+        const authRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId, authHash, salt }),
+        });
+
+        const authData = await authRes.json();
+
+        if (!authRes.ok) {
+          throw new Error(authData.error || "Authentication failed");
         }
 
-        // 2. Register Presence (Peers)
-        await setDoc(
-          doc(peersRef, user.uid),
-          {
-            uid: user.uid,
-            name: user.displayName || "Anonymous",
-            joinedAt: serverTimestamp(),
-            lastActive: serverTimestamp(),
-          },
-          { merge: true },
-        );
-
-        // 3. Listen for Peers
         if (mounted) {
-          const q = query(peersRef, orderBy("joinedAt", "asc"));
-          unsubscribePeers = onSnapshot(q, (peerSnap) => {
-            setPeers(peerSnap.docs.map((d) => d.data()));
-          });
-
-          // 4. Listen to Room Metadata
-          unsubscribeRoom = onSnapshot(roomRef, (snap) => {
-            if (!snap.exists()) {
-              setAuthError("Room was deleted.");
-              setIsAuthorized(false);
-            }
-          });
+          setAuthToken(authData.token);
+          setCryptoKey(dataKey);
+          setIsAuthorized(true);
         }
       } catch (err) {
-        console.error("Room Auth Error:", err);
+        console.error("Auth Error:", err);
         if (mounted) {
-          setAuthError("Failed to connect to room.");
+          setAuthError(err.message);
           setIsAuthorized(false);
         }
       }
     };
 
-    connectToRoom();
+    // Debounce slightly to avoid rapid requests while typing
+    const timer = setTimeout(() => {
+      authenticate();
+    }, 500);
 
     return () => {
-      mounted = false; // Mark as unmounted
-      unsubscribeRoom(); // Calls the real function (if assigned) or no-op
-      unsubscribePeers();
+      mounted = false;
+      clearTimeout(timer);
     };
-  }, [roomId, user, roomPassword]);
+  }, [roomId, roomPassword]);
 
-  return { isAuthorized, isHost, authError, peers };
+  return { isAuthorized, authToken, cryptoKey, authError, isNewRoom };
 };

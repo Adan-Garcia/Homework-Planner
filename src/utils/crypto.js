@@ -1,16 +1,4 @@
-/**
- * src/utils/crypto.js
- * Cryptographic utilities for the planner.
- * * CHANGES:
- * - Increased PBKDF2 iterations to 600,000 (OWASP Standard)
- * - Added hashPassword for secure auth verification
- */
-
-/**
- * Derives a cryptographic key from the Room Password using PBKDF2.
- * The Room ID is used as the salt.
- */
-export const deriveKey = async (password, salt) => {
+export const deriveKey = async (password, salt, purpose) => {
   const enc = new TextEncoder();
   const keyMaterial = await window.crypto.subtle.importKey(
     "raw",
@@ -20,18 +8,45 @@ export const deriveKey = async (password, salt) => {
     ["deriveKey"],
   );
 
-  return window.crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: enc.encode(salt),
-      iterations: 600000, // INCREASED for better security
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"],
-  );
+  // We append the purpose to the salt to create unique keys
+  const saltBuffer = enc.encode(salt + purpose);
+
+  if (purpose === "AUTH") {
+    // For Auth, we derive a string hash (SHA-256 hex)
+    // We intermediate via a temporary key to get bits
+    const tempKey = await window.crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: saltBuffer,
+        iterations: 100000,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      { name: "HMAC", hash: "SHA-256", length: 256 },
+      true,
+      ["sign"],
+    );
+
+    // Export key as raw bytes and hex stringify
+    const exported = await window.crypto.subtle.exportKey("raw", tempKey);
+    return Array.from(new Uint8Array(exported))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  } else {
+    // For Data, we derive an AES-GCM Key
+    return window.crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: saltBuffer,
+        iterations: 100000,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"],
+    );
+  }
 };
 
 /**
@@ -39,6 +54,7 @@ export const deriveKey = async (password, salt) => {
  */
 export const encryptEvent = async (eventData, key) => {
   const enc = new TextEncoder();
+  // Ensure we stringify strictly as JSON
   const encodedData = enc.encode(JSON.stringify(eventData));
 
   // Generate a random IV (Initialization Vector) - 12 bytes
@@ -62,7 +78,9 @@ export const encryptEvent = async (eventData, key) => {
  * Decrypts an encrypted event object.
  */
 export const decryptEvent = async (encryptedData, key) => {
-  if (!encryptedData.isEncrypted) return encryptedData;
+  // If raw data passed or not encrypted structure, return as is
+  if (!encryptedData || !encryptedData.iv || !encryptedData.data)
+    return encryptedData;
 
   try {
     const iv = new Uint8Array(
@@ -86,7 +104,12 @@ export const decryptEvent = async (encryptedData, key) => {
     const jsonString = dec.decode(decryptedContent);
     const parsed = JSON.parse(jsonString);
 
-    return { ...parsed, id: encryptedData.id };
+    // IMPORTANT FIX: Return the parsed object directly.
+    // Do not assume it needs ID merging unless it's an object.
+    if (typeof parsed === "object" && parsed !== null) {
+      return { ...parsed, id: encryptedData.id };
+    }
+    return parsed;
   } catch (e) {
     console.error("Decryption failed", e);
     return {

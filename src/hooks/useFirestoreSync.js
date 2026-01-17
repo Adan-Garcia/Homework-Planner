@@ -1,188 +1,232 @@
-import { useEffect, useRef, useCallback, useState } from "react";
-import {
-  doc,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-} from "firebase/firestore";
-import { db, appId } from "../utils/firebase";
-import { deriveKey, encryptEvent, decryptEvent } from "../utils/crypto";
+import { useEffect, useCallback, useState, useRef } from "react";
+import { io } from "socket.io-client";
+import { API_BASE_URL } from "../utils/constants";
+import { encryptEvent, decryptEvent } from "../utils/crypto";
 
 export const useFirestoreSync = (
   roomId,
-  roomPassword,
+  authToken,
+  cryptoKey,
   isAuthorized,
   setEvents,
   setClassColors,
-  events, // We need access to current events for some logic, though mainly handled via effect in Context
+  localEvents, // NEW: Current local state
+  localClassColors, // NEW: Current local colors
 ) => {
-  // Flag to prevent infinite loops: Server Update -> Local State -> Server Update
-  const isSyncingRef = useRef(false);
-  const [cryptoKey, setCryptoKey] = useState(null);
+  const [socket, setSocket] = useState(null);
+  const isInitialLoadDone = useRef(false);
 
-  // 0. INIT: Derive Key
+  // Refs to hold latest local state without triggering effect re-runs
+  const localEventsRef = useRef(localEvents);
+  const localColorsRef = useRef(localClassColors);
+
   useEffect(() => {
-    const initKey = async () => {
-      if (roomId && roomPassword) {
-        try {
-          const key = await deriveKey(roomPassword, roomId);
-          setCryptoKey(key);
-        } catch (e) {
-          console.error("Key derivation failed", e);
-          setCryptoKey(null);
+    localEventsRef.current = localEvents;
+  }, [localEvents]);
+
+  useEffect(() => {
+    localColorsRef.current = localClassColors;
+  }, [localClassColors]);
+
+  // 1. Connect to Socket & Fetch Initial Data
+  useEffect(() => {
+    if (!roomId || !isAuthorized || !authToken || !cryptoKey) {
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
+      }
+      return;
+    }
+
+    const newSocket = io(API_BASE_URL);
+    setSocket(newSocket);
+
+    newSocket.emit("join", roomId);
+
+    const fetchInitialData = async () => {
+      try {
+        console.log(`[Sync] Fetching events for room: ${roomId}`);
+        const res = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/events`, {
+          headers: { Authorization: authToken },
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error(
+            `[Sync] Failed to fetch events: ${res.status} ${errText}`,
+          );
+          return;
         }
-      } else {
-        setCryptoKey(null);
+
+        const data = await res.json();
+        // Safety check: ensure events is an array
+        const rawEvents = Array.isArray(data.events) ? data.events : [];
+        let serverMeta = data.meta || {};
+
+        // --- HANDLE EVENTS ---
+        if (rawEvents.length > 0) {
+          console.log(`[Sync] Found ${rawEvents.length} events on server.`);
+          const decryptedEvents = await Promise.all(
+            rawEvents.map((e) => decryptEvent(e, cryptoKey)),
+          );
+          setEvents(decryptedEvents);
+        } else {
+          // Server is empty. Check if we have local data to re-seed.
+          const currentLocal = localEventsRef.current;
+          if (currentLocal && currentLocal.length > 0) {
+            console.log(
+              `[Sync] Server empty. Re-seeding with ${currentLocal.length} local events.`,
+            );
+            // Encrypt all local events
+            const encryptedEvents = await Promise.all(
+              currentLocal.map((e) => encryptEvent(e, cryptoKey)),
+            );
+            // Send to server (don't update local state, it's already there)
+            newSocket.emit("event:bulk_save", {
+              roomId,
+              events: encryptedEvents,
+            });
+          }
+        }
+
+        // --- HANDLE COLORS ---
+        // Parse server colors if they exist
+        let serverColors = null;
+        if (serverMeta && serverMeta.classColors) {
+          serverColors =
+            typeof serverMeta.classColors === "string"
+              ? JSON.parse(serverMeta.classColors)
+              : serverMeta.classColors;
+        }
+
+        if (serverColors && Object.keys(serverColors).length > 0) {
+          setClassColors(serverColors);
+        } else {
+          // Server has no colors. Check local.
+          const currentColors = localColorsRef.current;
+          if (currentColors && Object.keys(currentColors).length > 0) {
+            console.log("[Sync] Server missing colors. Re-seeding.");
+            newSocket.emit("meta:save", {
+              roomId,
+              meta: { classColors: currentColors },
+            });
+          }
+        }
+
+        isInitialLoadDone.current = true;
+      } catch (e) {
+        console.error("[Sync] Initial load error:", e);
       }
     };
-    initKey();
-  }, [roomId, roomPassword]);
 
-  // 1. LISTEN: Inbound Data (Server -> Client)
-  // Single Document Read: 1 Read Operation per update
+    fetchInitialData();
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [roomId, isAuthorized, authToken, cryptoKey]);
+
+  // 2. Listen for Real-time Updates
   useEffect(() => {
-    if (!roomId || !isAuthorized || !cryptoKey) return;
+    if (!socket || !cryptoKey) return;
 
-    // We now listen to the ROOM document directly, not a subcollection
-    const roomRef = doc(
-      db,
-      "artifacts",
-      appId,
-      "public",
-      "data",
-      "rooms",
-      roomId,
-    );
-
-    console.log(`[Sync] Subscribing to Room Doc: ${roomId}`);
-
-    const unsubscribe = onSnapshot(roomRef, async (snapshot) => {
-      if (!snapshot.exists()) return;
-
-      const data = snapshot.data();
-
-      // Handle Class Colors (Unencrypted for shared styling)
-      if (data.classColors) {
-        setClassColors((prev) => {
-          if (JSON.stringify(prev) !== JSON.stringify(data.classColors)) {
-            return data.classColors;
-          }
-          return prev;
-        });
-      }
-
-      // Handle Events (Encrypted Blob)
-      if (data.encryptedData) {
-        // LOCK: This update is from server
-        isSyncingRef.current = true;
-
-        try {
-          // Decrypt the single blob containing ALL events
-          // Re-using decryptEvent logic since it handles { iv, data } format
-          const decryptedPayload = await decryptEvent(
-            data.encryptedData,
-            cryptoKey,
-          );
-
-          // The payload itself is the array of events
-          if (Array.isArray(decryptedPayload)) {
-            setEvents(decryptedPayload);
-          }
-        } catch (e) {
-          console.error("Failed to decrypt sync data", e);
+    const handleEventSync = async (encryptedEvent) => {
+      const decrypted = await decryptEvent(encryptedEvent, cryptoKey);
+      setEvents((prev) => {
+        const exists = prev.find((e) => e.id === decrypted.id);
+        if (exists) {
+          return prev.map((e) => (e.id === decrypted.id ? decrypted : e));
         }
+        return [...prev, decrypted];
+      });
+    };
 
-        // UNLOCK after a moment
-        setTimeout(() => {
-          isSyncingRef.current = false;
-        }, 500); // Higher timeout to ensure local React rendering settles
-      }
-    });
-
-    return () => unsubscribe();
-  }, [roomId, isAuthorized, cryptoKey, setEvents, setClassColors]);
-
-  // 2. WRITE: Outbound Actions (Client -> Server)
-  // Accepts the FULL state array. 1 Write Operation per save.
-  const syncAction = useCallback(
-    async (allEvents) => {
-      if (!roomId || !isAuthorized || !cryptoKey) return;
-      if (isSyncingRef.current) {
-        console.log("Skipping sync: Update came from server");
-        return;
-      }
-
-      const roomRef = doc(
-        db,
-        "artifacts",
-        appId,
-        "public",
-        "data",
-        "rooms",
-        roomId,
+    const handleBulkEventSync = async (encryptedEvents) => {
+      const decryptedList = await Promise.all(
+        encryptedEvents.map((e) => decryptEvent(e, cryptoKey)),
       );
 
-      try {
-        console.log(`[Sync] Saving Snapshot (${allEvents.length} items)`);
+      setEvents((prev) => {
+        const newMap = new Map(prev.map((e) => [e.id, e]));
+        decryptedList.forEach((e) => newMap.set(e.id, e));
+        return Array.from(newMap.values());
+      });
+    };
 
-        // Encrypt the ENTIRE array as one object
-        // We reuse encryptEvent but pass the whole array as the "data"
-        // The ID field in the result will be undefined, which is fine for the blob
-        const encryptedBlob = await encryptEvent(allEvents, cryptoKey);
+    const handleEventRemove = (eventId) => {
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    };
 
-        await setDoc(
-          roomRef,
-          {
-            encryptedData: encryptedBlob,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true },
-        );
-      } catch (e) {
-        console.error(`[Sync] Save Failed:`, e);
+    const handleMetaSync = (meta) => {
+      if (meta && meta.classColors) {
+        setClassColors(meta.classColors);
       }
+    };
+
+    socket.on("event:sync", handleEventSync);
+    socket.on("event:bulk_sync", handleBulkEventSync);
+    socket.on("event:remove", handleEventRemove);
+    socket.on("meta:sync", handleMetaSync);
+
+    return () => {
+      socket.off("event:sync", handleEventSync);
+      socket.off("event:bulk_sync", handleBulkEventSync);
+      socket.off("event:remove", handleEventRemove);
+      socket.off("meta:sync", handleMetaSync);
+    };
+  }, [socket, cryptoKey, setEvents, setClassColors]);
+
+  // 3. Actions
+  const addEvent = useCallback(
+    async (event) => {
+      if (!socket || !cryptoKey) return;
+      const encrypted = await encryptEvent(event, cryptoKey);
+      socket.emit("event:save", { roomId, event: encrypted });
+      setEvents((prev) => [...prev, event]);
     },
-    [roomId, isAuthorized, cryptoKey],
+    [socket, cryptoKey, roomId, setEvents],
   );
 
-  // Helper for colors (separate to avoid encrypting style prefs)
+  const bulkAddEvents = useCallback(
+    async (events) => {
+      if (!socket || !cryptoKey || events.length === 0) return;
+
+      const encryptedEvents = await Promise.all(
+        events.map((e) => encryptEvent(e, cryptoKey)),
+      );
+
+      socket.emit("event:bulk_save", { roomId, events: encryptedEvents });
+      setEvents((prev) => [...prev, ...events]);
+    },
+    [socket, cryptoKey, roomId, setEvents],
+  );
+
+  const updateEvent = useCallback(
+    async (event) => {
+      if (!socket || !cryptoKey) return;
+      const encrypted = await encryptEvent(event, cryptoKey);
+      socket.emit("event:save", { roomId, event: encrypted });
+      setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
+    },
+    [socket, cryptoKey, roomId, setEvents],
+  );
+
+  const deleteEvent = useCallback(
+    async (eventId) => {
+      if (!socket) return;
+      socket.emit("event:delete", { roomId, eventId });
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    },
+    [socket, roomId, setEvents],
+  );
+
   const syncColors = useCallback(
-    async (colors) => {
-      if (!roomId || !isAuthorized) return;
-      const roomRef = doc(
-        db,
-        "artifacts",
-        appId,
-        "public",
-        "data",
-        "rooms",
-        roomId,
-      );
-      await setDoc(roomRef, { classColors: colors }, { merge: true });
+    (colors) => {
+      if (!socket) return;
+      socket.emit("meta:save", { roomId, meta: { classColors: colors } });
     },
-    [roomId, isAuthorized],
+    [socket, roomId],
   );
 
-  // 3. EPHEMERAL: Destroy Room
-  const destroyRoomData = useCallback(async () => {
-    if (!roomId || !isAuthorized) return;
-    try {
-      const roomRef = doc(
-        db,
-        "artifacts",
-        appId,
-        "public",
-        "data",
-        "rooms",
-        roomId,
-      );
-      await deleteDoc(roomRef);
-      console.log("Room data destroyed");
-    } catch (e) {
-      console.error("Failed to destroy room", e);
-    }
-  }, [roomId, isAuthorized]);
-
-  return { syncAction, syncColors, destroyRoomData };
+  return { addEvent, updateEvent, deleteEvent, syncColors, bulkAddEvents };
 };
