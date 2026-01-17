@@ -84,7 +84,12 @@ export const EventProvider = ({ children }) => {
         } else if (inEvent) {
           const [key, ...valueParts] = line.split(":");
           const value = valueParts.join(":");
-          if (key.includes("DTSTART")) currentEvent.date = parseICSDate(value);
+          if (key.includes("DTSTART")) {
+              currentEvent.date = parseICSDate(value);
+              // RE-ADDED: Parse time from ICS
+              const timeStr = parseICSTime(value);
+              if (timeStr) currentEvent.time = timeStr;
+          }
           if (key.includes("SUMMARY")) currentEvent.title = value;
           if (key.includes("LOCATION")) currentEvent.location = value;
           if (key.includes("DESCRIPTION")) currentEvent.description = value;
