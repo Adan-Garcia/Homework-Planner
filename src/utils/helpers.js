@@ -143,9 +143,7 @@ export const generateICS = (events) => {
   ];
   events.forEach((ev) => {
     icsLines.push("BEGIN:VEVENT");
-    icsLines.push(
-      `UID:${ev.id || `evt-${Math.random().toString(36).substr(2, 9)}`}`,
-    );
+    icsLines.push(`UID:${ev.id || crypto.randomUUID()}`);
     icsLines.push(`DTSTAMP:${now}`);
     if (ev.time) {
       const [h, m] = ev.time.split(":");

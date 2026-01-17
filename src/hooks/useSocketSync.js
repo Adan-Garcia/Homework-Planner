@@ -180,9 +180,26 @@ export const useSocketSync = (
   const addEvent = useCallback(
     async (event) => {
       if (!socket || !cryptoKey) return;
-      const encrypted = await encryptEvent(event, cryptoKey);
-      socket.emit("event:save", { roomId, event: encrypted });
+
+      // 1. Optimistic Update (Show it immediately)
       setEvents((prev) => [...prev, event]);
+
+      try {
+        const encrypted = await encryptEvent(event, cryptoKey);
+
+        // 2. Emit with Acknowledgement (Requires server-side support)
+        // If your server doesn't support acks, you must rely on a separate 'error' listener
+        socket.emit("event:save", { roomId, event: encrypted }, (response) => {
+          if (response && response.error) {
+            throw new Error(response.error);
+          }
+        });
+      } catch (err) {
+        console.error("Sync failed:", err);
+        // 3. Rollback on Failure
+        setEvents((prev) => prev.filter((e) => e.id !== event.id));
+        alert("Failed to save event. Changes reverted.");
+      }
     },
     [socket, cryptoKey, roomId, setEvents],
   );

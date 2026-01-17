@@ -10,12 +10,8 @@ import {
   Rows,
   AlignLeft,
 } from "lucide-react";
-import {
-  useEvents,
-  useUI,
-  EventProvider,
-  UIProvider,
-} from "./context/PlannerContext";
+import { useUI, EventProvider, UIProvider } from "./context/PlannerContext";
+import useData from "./context/DataContext";
 import SetupScreen from "./components/setup/SetupScreen";
 import Sidebar from "./components/planner/Sidebar";
 import CalendarView from "./components/planner/CalendarView";
@@ -24,7 +20,7 @@ import TaskModal from "./components/modals/TaskModal";
 import ConfirmationModal from "./components/modals/ConfirmationModal";
 
 function PlannerApp() {
-  const eventsContext = useEvents();
+  const eventsContext = useData();
   const {
     events,
     updateEvent,
@@ -303,7 +299,7 @@ function PlannerApp() {
           handleSidebarDrop={handleSidebarDrop}
           toggleTask={(e, id) => {
             e.stopPropagation();
-            useEvents().toggleTaskCompletion(id);
+            useData().toggleTaskCompletion(id);
           }}
           openEditTaskModal={(task) => openTaskModal(task)}
           draggedEventId={draggedEventId}

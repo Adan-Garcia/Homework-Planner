@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { RefreshCw, Clock, Flag, Layers, AlignLeft } from "lucide-react";
 import Modal from "../ui/Modal";
 import { EVENT_TYPES } from "../../utils/constants";
-import { useEvents, useUI } from "../../context/PlannerContext";
+import { useUI } from "../../context/PlannerContext";
+import { useData } from "../../context/DataContext";
 import { addDaysToDate } from "../../utils/helpers";
 
 const TaskModal = ({ requestDelete, saveTask }) => {
   // Accept props from App.jsx
   const { modals, closeModal, editingTask } = useUI();
-  const { addEvent, updateEvent, classColors } = useEvents(); // Remove deleteEvent here, use prop
+  const { addEvent, updateEvent, classColors } = useData(); // Remove deleteEvent here, use prop
 
   const isOpen = modals.task;
   const onClose = () => closeModal("task");

@@ -1,9 +1,5 @@
-import {
-  unfoldLines,
-  parseICSDate,
-  determineClass,
-  determineType,
-} from "./helpers";
+import ICAL from "ical.js"; // Requires npm install ical.js
+import { determineClass, determineType } from "./helpers";
 
 export const processICSContent = (
   text,
@@ -14,48 +10,47 @@ export const processICSContent = (
   setEvents,
 ) => {
   try {
-    const unfolded = unfoldLines(text);
-    const lines = unfolded.split(/\r\n|\n|\r/);
+    // 1. Parse using Library
+    const jcalData = ICAL.parse(text);
+    const vcalendar = new ICAL.Component(jcalData);
+    const vevents = vcalendar.getAllSubcomponents("vevent");
+
     const newEvents = [];
-    let currentEvent = null;
-    let inEvent = false;
     const foundClasses = new Set();
 
-    for (const line of lines) {
-      if (line.startsWith("BEGIN:VEVENT")) {
-        inEvent = true;
-        currentEvent = {};
-      } else if (line.startsWith("END:VEVENT")) {
-        if (currentEvent) {
-          const type = determineType(
-            currentEvent.title,
-            currentEvent.description,
-          );
-          const className = determineClass(
-            currentEvent.location,
-            currentEvent.title,
-          );
-          currentEvent.type = type;
-          currentEvent.class = className;
-          if (className) foundClasses.add(className);
-          if (!currentEvent.id)
-            currentEvent.id =
-              Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-          newEvents.push(currentEvent);
-        }
-        inEvent = false;
-        currentEvent = null;
-      } else if (inEvent) {
-        const [key, ...valueParts] = line.split(":");
-        const value = valueParts.join(":");
-        if (key.includes("DTSTART")) currentEvent.date = parseICSDate(value);
-        if (key.includes("SUMMARY")) currentEvent.title = value;
-        if (key.includes("LOCATION")) currentEvent.location = value;
-        if (key.includes("DESCRIPTION")) currentEvent.description = value;
-      }
-    }
+    vevents.forEach((vevent) => {
+      const event = new ICAL.Event(vevent);
 
-    // Color Logic
+      const summary = event.summary || "";
+      const description = event.description || "";
+      const location = event.location || "";
+      const startDate = event.startDate;
+
+      // Skip if no date
+      if (!startDate) return;
+
+      const type = determineType(summary, description);
+      const className = determineClass(location, summary);
+
+      if (className) foundClasses.add(className);
+
+      newEvents.push({
+        id: crypto.randomUUID(), // Secure ID
+        title: summary,
+        description: description,
+        location: location,
+        // Convert ICAL date to YYYY-MM-DD
+        date: startDate.toJSDate().toISOString().split("T")[0],
+        time: startDate.isDate
+          ? null
+          : startDate.toJSDate().toTimeString().substring(0, 5),
+        type: type,
+        class: className || "General",
+        completed: false,
+      });
+    });
+
+    // Color Logic (Same as before)
     let finalColors = { ...currentClassColors };
     const defaultPalette = [
       "#3b82f6",
@@ -87,6 +82,6 @@ export const processICSContent = (
     return { success: true, count: newEvents.length };
   } catch (e) {
     console.error("ICS Parse Error", e);
-    return { success: false, error: e.message };
+    return { success: false, error: "Failed to parse ICS file. Is it valid?" };
   }
 };

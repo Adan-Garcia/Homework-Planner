@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Flag, ExternalLink } from "lucide-react";
 import { getWeekDates, formatTime } from "../../utils/helpers";
-import { useEvents, useUI } from "../../context/PlannerContext";
+import { useUI } from "../../context/PlannerContext";
+import { useData } from "../../context/DataContext";
 import {
   format,
   addMonths,
@@ -42,7 +43,7 @@ const LinkifiedText = ({ text }) => {
 };
 
 const CalendarView = ({ filteredEvents: propFilteredEvents }) => {
-  const { events, classColors, updateEvent, hiddenClasses } = useEvents();
+  const { events, classColors, updateEvent, hiddenClasses } = useData();
   const {
     currentDate,
     setCurrentDate,

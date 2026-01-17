@@ -13,7 +13,8 @@ import {
   Lock,
 } from "lucide-react";
 import Modal from "../ui/Modal";
-import { useEvents, useUI } from "../../context/PlannerContext";
+import { useUI } from "../../context/PlannerContext";
+import { useData } from "../../context/DataContext";
 
 const SetupScreen = () => {
   const {
@@ -22,7 +23,7 @@ const SetupScreen = () => {
     setRoomId,
     setRoomPassword,
     syncError,
-  } = useEvents();
+  } = useData();
   const { darkMode, setDarkMode, setView, openModal, closeModal, modals } =
     useUI();
 
@@ -52,7 +53,7 @@ const SetupScreen = () => {
     setError("");
     try {
       const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
-        urlInput
+        urlInput,
       )}`;
       const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("Network error");
