@@ -11,7 +11,11 @@ import {
   FileCode,
   ChevronDown,
   CalendarX,
-  Calendar
+  Calendar,
+  Edit2,
+  Check,
+  X,
+  Users
 } from "lucide-react";
 import Modal from "../ui/Modal";
 import { useEvents } from "../../context/PlannerContext";
@@ -210,6 +214,85 @@ const MergeContent = ({
 };
 
 // ==========================================
+// Sub-Component: Sync Room Content
+// ==========================================
+const SyncRoomContent = () => {
+  const { roomId, setRoomId, isHost, peers } = useEvents();
+  const [inputRoomId, setInputRoomId] = useState(roomId || "");
+
+  // Update local input if global roomId changes
+  useEffect(() => {
+    if (roomId) setInputRoomId(roomId);
+  }, [roomId]);
+
+  const handleJoin = () => {
+    if (inputRoomId.trim()) {
+      setRoomId(inputRoomId.trim());
+    }
+  };
+
+  const handleLeave = () => {
+    setRoomId(null);
+    setInputRoomId("");
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={inputRoomId}
+          onChange={(e) => setInputRoomId(e.target.value)}
+          placeholder="Enter Room ID"
+          className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white"
+        />
+        <button
+          onClick={handleJoin}
+          className="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 whitespace-nowrap"
+        >
+          Join / Switch
+        </button>
+      </div>
+
+      {roomId ? (
+        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
+              Active Room: {roomId}
+            </span>
+            <button
+              onClick={handleLeave}
+              className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded"
+              title="Leave Room"
+            >
+              <LogOut className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="flex flex-col gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-1">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  isHost ? "bg-green-500" : "bg-blue-400"
+                }`}
+              />
+              <span>Role: {isHost ? "Host" : "Peer"}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              <span>Peers connected: {peers ? peers.length : 0}</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="text-[10px] text-slate-400 text-center leading-tight">
+          Enter a Room ID to sync with others.
+        </p>
+      )}
+    </div>
+  );
+};
+
+// ==========================================
 // Sub-Component: Date Cleaner Content
 // ==========================================
 const DateCleanerContent = ({ onCloseModal }) => {
@@ -225,27 +308,17 @@ const DateCleanerContent = ({ onCloseModal }) => {
       return;
     }
 
-    const targetTime = new Date(targetDate).getTime();
-    const newEvents = {};
-    let deletedCount = 0;
-
-    Object.keys(events).forEach(dateKey => {
-      const eventTime = new Date(dateKey).getTime();
-      
-      let shouldKeep = true;
-      if (mode === "before" && eventTime < targetTime) shouldKeep = false;
-      if (mode === "after" && eventTime > targetTime) shouldKeep = false;
-
-      if (shouldKeep) {
-        newEvents[dateKey] = events[dateKey];
-      } else {
-        deletedCount++;
-      }
+    const newEvents = events.filter((ev) => {
+      if (!ev.date) return true;
+      if (mode === "before") return ev.date >= targetDate;
+      return ev.date <= targetDate;
     });
+
+    const deletedCount = events.length - newEvents.length;
 
     if (deletedCount > 0) {
       importJsonData(JSON.stringify(newEvents), false);
-      alert(`Deleted events from ${deletedCount} days.`);
+      alert(`Deleted ${deletedCount} events.`);
       onCloseModal();
     } else {
       alert("No events found in that range.");
@@ -300,10 +373,119 @@ const DateCleanerContent = ({ onCloseModal }) => {
 };
 
 // ==========================================
+// Sub-Component: Class Row (Optimized for Lag Reduction)
+// ==========================================
+const ClassRow = ({ cls, color, onColorChange, onDelete, onRename }) => {
+  const [localColor, setLocalColor] = useState(color);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(cls);
+
+  // Sync local state if prop changes (e.g. reset)
+  useEffect(() => {
+    setLocalColor(color);
+  }, [color]);
+
+  // Debounce color updates to avoid lagging the UI
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localColor !== color) {
+        onColorChange(cls, localColor);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [localColor, color, cls, onColorChange]);
+
+  const handleSaveEdit = () => {
+    if (editValue && editValue.trim() !== "" && editValue !== cls) {
+      onRename(cls, editValue.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditValue(cls);
+  };
+
+  return (
+    <div className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg group">
+      <div className="flex items-center gap-3 flex-1 ">
+        <div className="relative w-8 h-8 shrink-0 rounded-full overflow-hidden shadow-sm ring-2 ring-slate-100 cursor-pointer">
+          <input
+            type="color"
+            value={localColor}
+            onChange={(e) => setLocalColor(e.target.value)}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] p-0 border-0 cursor-pointer"
+          />
+        </div>
+
+        {isEditing ? (
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            <input
+              type="text"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="flex-1 min-w-0 p-1 text-xs border border-slate-300 rounded dark:bg-slate-600 dark:border-slate-500 dark:text-white"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveEdit();
+                if (e.key === "Escape") handleCancelEdit();
+              }}
+            />
+            <button
+              onClick={handleSaveEdit}
+              className="p-1 text-green-600 hover:bg-green-50 rounded dark:hover:bg-green-900/30"
+            >
+              <Check className="w-3 h-3" />
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              className="p-1 text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/30"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <span
+            className="font-medium text-sm dark:text-slate-200 truncate flex-1 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            onClick={() => {
+              setIsEditing(true);
+              setEditValue(cls);
+            }}
+            title="Click to rename"
+          >
+            {cls}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center shrink-0">
+        {!isEditing && (
+          <button
+            onClick={() => {
+              setIsEditing(true);
+              setEditValue(cls);
+            }}
+            className="text-slate-300 hover:text-blue-500 p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Edit2 className="w-3 h-3" />
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(cls)}
+          className="text-slate-300 hover:text-red-500 p-2"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
 // Sub-Component: Class Manager
 // ==========================================
-const ClassManager = ({ classColors, setClassColors, onDeleteClass }) => {
-
+const ClassManager = ({ classColors, setClassColors, onDeleteClass, onRenameClass }) => {
   return (
     <section>
       <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 px-1">
@@ -311,35 +493,16 @@ const ClassManager = ({ classColors, setClassColors, onDeleteClass }) => {
       </h4>
       <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
         {Object.keys(classColors).map((cls) => (
-          <div
+          <ClassRow
             key={cls}
-            className="flex items-center justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="relative w-8 h-8 rounded-full overflow-hidden shadow-sm ring-2 ring-slate-100 cursor-pointer">
-                <input
-                  type="color"
-                  value={classColors[cls]}
-                  onChange={(e) =>
-                    setClassColors((prev) => ({
-                      ...prev,
-                      [cls]: e.target.value,
-                    }))
-                  }
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] p-0 border-0 cursor-pointer"
-                />
-              </div>
-              <span className="font-medium text-sm dark:text-slate-200">
-                {cls}
-              </span>
-            </div>
-            <button
-              onClick={() => onDeleteClass(cls)}
-              className="text-slate-300 hover:text-red-500 p-2"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
+            cls={cls}
+            color={classColors[cls]}
+            onColorChange={(c, newColor) =>
+              setClassColors((prev) => ({ ...prev, [c]: newColor }))
+            }
+            onDelete={onDeleteClass}
+            onRename={onRenameClass}
+          />
         ))}
       </div>
     </section>
@@ -417,7 +580,7 @@ const SettingsModal = ({
   handleJsonSave,
   handleICSExport,
 }) => {
-  const { events } = useEvents();
+  const { events, renameClass } = useEvents();
 
   
   useEffect(() => {
@@ -435,6 +598,7 @@ const SettingsModal = ({
             classColors={classColors}
             setClassColors={setClassColors}
             onDeleteClass={deleteClass}
+            onRenameClass={renameClass}
           />
           
           <div className="border-t border-slate-100 dark:border-slate-700" />
@@ -450,6 +614,13 @@ const SettingsModal = ({
                 onOpenJsonEditor={() => setShowJsonEdit(true)} 
                 onCloseModal={onClose}
               />
+            </CollapsibleCard>
+
+            <CollapsibleCard 
+              title="Sync Room" 
+              icon={Users}
+            >
+              <SyncRoomContent />
             </CollapsibleCard>
 
             <CollapsibleCard 

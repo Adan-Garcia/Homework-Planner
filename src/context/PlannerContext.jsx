@@ -84,12 +84,7 @@ export const EventProvider = ({ children }) => {
         } else if (inEvent) {
           const [key, ...valueParts] = line.split(":");
           const value = valueParts.join(":");
-          if (key.includes("DTSTART")) {
-              currentEvent.date = parseICSDate(value);
-              // RE-ADDED: Parse time from ICS
-              const timeStr = parseICSTime(value);
-              if (timeStr) currentEvent.time = timeStr;
-          }
+          if (key.includes("DTSTART")) currentEvent.date = parseICSDate(value);
           if (key.includes("SUMMARY")) currentEvent.title = value;
           if (key.includes("LOCATION")) currentEvent.location = value;
           if (key.includes("DESCRIPTION")) currentEvent.description = value;
@@ -157,25 +152,15 @@ export const EventProvider = ({ children }) => {
   const updateEvent = (event) => dispatchCalEvent('UPDATE', event);
   const deleteEvent = (id) => dispatchCalEvent('DELETE', id);
   
-  // FIX: Added missing toggle function that is used in Sidebar/App
   const toggleTaskCompletion = (id) => {
     setEvents(prev => {
       const task = prev.find(e => e.id === id);
       if (task) {
-         const updatedTask = { ...task, completed: !task.completed };
-         // We can reuse dispatch logic or manually update
-         // Using dispatch ensures sync
-         // But we need to do it outside the reducer to avoid side effects inside reducer if we were calling dispatch there.
-         // Here we are inside the toggle function, so we can calculate the new state.
-         // However, dispatchCalEvent expects a payload. 
-         // Let's just find and update.
-         // Better approach: call dispatchCalEvent directly
-         return prev; // Return prev here and call dispatch below to avoid complexity
+         return prev; 
       }
       return prev;
     });
     
-    // Actually, just find the task and call updateEvent
     const task = events.find(e => e.id === id);
     if (task) {
         updateEvent({ ...task, completed: !task.completed });
@@ -244,6 +229,30 @@ export const EventProvider = ({ children }) => {
     deleteClass(source);
   };
 
+  const renameClass = (oldName, newName) => {
+    if (!oldName || !newName || oldName === newName) return;
+
+    if (classColors[newName]) {
+        if (window.confirm(`Class "${newName}" already exists. Merge "${oldName}" into it?`)) {
+            mergeClasses(oldName, newName);
+        }
+        return;
+    }
+
+    setEvents(prev => {
+      const updated = prev.map(e => e.class === oldName ? { ...e, class: newName } : e);
+      dispatchCalEvent('BULK', updated); 
+      return updated;
+    });
+
+    setClassColors(prev => {
+        const next = { ...prev };
+        next[newName] = next[oldName];
+        delete next[oldName];
+        return next;
+    });
+  };
+
   return (
     <EventContext.Provider
       value={{
@@ -259,12 +268,13 @@ export const EventProvider = ({ children }) => {
         addEvent,
         updateEvent,
         deleteEvent,
-        toggleTaskCompletion, // Exported here
+        toggleTaskCompletion, 
         importJsonData,
         exportICS,
         resetAllData,
         deleteClass,
         mergeClasses,
+        renameClass,
         user,
         roomId,
         setRoomId,
@@ -284,7 +294,6 @@ export const UIProvider = ({ children }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
   
-  // FIX: Changed default from "all" to "All" to match logic in App.jsx
   const [activeTypeFilter, setActiveTypeFilter] = useState("All");
   
   const [showCompleted, setShowCompleted] = useState(true);
