@@ -35,23 +35,6 @@ export const deriveKey = async (password, salt) => {
 };
 
 /**
- * Creates a one-way hash of the password using the room ID as salt.
- * Used for verifying room access without storing the actual password.
- */
-export const hashPassword = async (password, salt) => {
-  const enc = new TextEncoder();
-  const data = enc.encode(password + salt); // Simple concatenation for salt
-  const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
-
-  // Convert buffer to hex string
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hashHex = hashArray
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return hashHex;
-};
-
-/**
  * Encrypts a single event object using AES-GCM.
  */
 export const encryptEvent = async (eventData, key) => {

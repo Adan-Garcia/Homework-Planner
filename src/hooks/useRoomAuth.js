@@ -28,6 +28,7 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
     }
 
     setAuthError(null);
+    let mounted = true;
     let unsubscribeRoom = () => {};
     let unsubscribePeers = () => {};
 
@@ -52,7 +53,7 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
     const connectToRoom = async () => {
       try {
         const snapshot = await getDoc(roomRef);
-
+        if (!mounted) return;
         // 1. Validate or Create Room
         if (!snapshot.exists()) {
           // Room doesn't exist -> Create it with a Challenge
@@ -64,8 +65,11 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
             authChallenge: challenge, // Store this instead of passwordHash
             classColors: {},
           });
-          setIsHost(true);
-          setIsAuthorized(true);
+
+          if (mounted) {
+            setIsHost(true);
+            setIsAuthorized(true);
+          }
         } else {
           // Room exists -> Verify using the Challenge
           const data = snapshot.data();
@@ -78,13 +82,16 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
           );
 
           if (!isValid) {
-            setAuthError("Incorrect Room Password");
-            setIsAuthorized(false);
+            if (mounted) {
+              setAuthError("Incorrect Room Password");
+              setIsAuthorized(false);
+            }
             return;
           }
-
-          setIsHost(data.hostId === user.uid);
-          setIsAuthorized(true);
+          if (mounted) {
+            setIsHost(data.hostId === user.uid);
+            setIsAuthorized(true);
+          }
         }
 
         // 2. Register Presence (Peers)
@@ -100,29 +107,34 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
         );
 
         // 3. Listen for Peers
-        const q = query(peersRef, orderBy("joinedAt", "asc"));
-        unsubscribePeers = onSnapshot(q, (peerSnap) => {
-          setPeers(peerSnap.docs.map((d) => d.data()));
-        });
+        if (mounted) {
+          const q = query(peersRef, orderBy("joinedAt", "asc"));
+          unsubscribePeers = onSnapshot(q, (peerSnap) => {
+            setPeers(peerSnap.docs.map((d) => d.data()));
+          });
 
-        // 4. Listen to Room Metadata (in case host changes or room deleted)
-        unsubscribeRoom = onSnapshot(roomRef, (snap) => {
-          if (!snap.exists()) {
-            setAuthError("Room was deleted.");
-            setIsAuthorized(false);
-          }
-        });
+          // 4. Listen to Room Metadata
+          unsubscribeRoom = onSnapshot(roomRef, (snap) => {
+            if (!snap.exists()) {
+              setAuthError("Room was deleted.");
+              setIsAuthorized(false);
+            }
+          });
+        }
       } catch (err) {
         console.error("Room Auth Error:", err);
-        setAuthError("Failed to connect to room.");
-        setIsAuthorized(false);
+        if (mounted) {
+          setAuthError("Failed to connect to room.");
+          setIsAuthorized(false);
+        }
       }
     };
 
     connectToRoom();
 
     return () => {
-      unsubscribeRoom();
+      mounted = false; // Mark as unmounted
+      unsubscribeRoom(); // Calls the real function (if assigned) or no-op
       unsubscribePeers();
     };
   }, [roomId, user, roomPassword]);
