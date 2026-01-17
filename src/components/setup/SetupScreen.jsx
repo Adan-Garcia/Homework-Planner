@@ -10,13 +10,12 @@ import {
   Sun,
   Moon,
   Users,
-  Lock, // Added Icon
+  Lock,
 } from "lucide-react";
 import Modal from "../ui/Modal";
 import { useEvents, useUI } from "../../context/PlannerContext";
 
 const SetupScreen = () => {
-  // Added setRoomId to destructuring
   const {
     processICSContent,
     setEvents,
@@ -31,10 +30,9 @@ const SetupScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // New State for Room
   const [roomInput, setRoomInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
-  // Handle File
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -48,13 +46,14 @@ const SetupScreen = () => {
     }
   };
 
-  // Handle URL
   const handleUrlFetch = async () => {
     if (!urlInput) return;
     setIsLoading(true);
     setError("");
     try {
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlInput)}`;
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
+        urlInput
+      )}`;
       const response = await fetch(proxyUrl);
       if (!response.ok) throw new Error("Network error");
       const text = await response.text();
@@ -68,17 +67,22 @@ const SetupScreen = () => {
     }
   };
 
-  // NEW: Room Join Logic
-  const handleJoinRoom = () => {
+  const handleJoinRoom = (e) => {
+    e.preventDefault();
     if (!roomInput.trim()) return;
     setRoomPassword(passwordInput);
     setRoomId(roomInput.toUpperCase());
     setView("planner");
   };
 
-  const handleCreateRoom = () => {
-    const newCode = Math.random().toString(36).substring(7).toUpperCase();
-    setRoomPassword(passwordInput); // Use entered password for new room
+  const handleCreateRoom = (e) => {
+    e.preventDefault();
+    // FIX: Use the input name if provided, otherwise generate random
+    const newCode = roomInput.trim()
+      ? roomInput.trim().toUpperCase()
+      : Math.random().toString(36).substring(7).toUpperCase();
+
+    setRoomPassword(passwordInput);
     setRoomId(newCode);
     setView("planner");
   };
@@ -121,7 +125,6 @@ const SetupScreen = () => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          {/* Card 1: Upload */}
           <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-900 transition-all group">
             <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <Upload className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -143,7 +146,6 @@ const SetupScreen = () => {
             </label>
           </div>
 
-          {/* Card 2: URL */}
           <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-purple-200 dark:hover:border-purple-900 transition-all group">
             <div className="w-12 h-12 bg-purple-50 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
               <LinkIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -176,7 +178,6 @@ const SetupScreen = () => {
             </div>
           </div>
 
-          {/* NEW: Collaboration Row (Minimal) */}
           <div className="md:col-span-2 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-50 dark:bg-green-900/30 rounded-lg">
@@ -196,7 +197,7 @@ const SetupScreen = () => {
                 type="text"
                 placeholder="ROOM CODE"
                 value={roomInput}
-                onChange={(e) => setRoomInput(e.target.value.toUpperCase())} // Force Caps
+                onChange={(e) => setRoomInput(e.target.value.toUpperCase())}
                 className="w-full md:w-32 px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white uppercase outline-none focus:border-green-500"
               />
 
@@ -237,7 +238,6 @@ const SetupScreen = () => {
               <p className="text-sm">{error || syncError}</p>
             </div>
           )}
-          {/* Footer Actions */}
           <div className="md:col-span-2 flex justify-center pt-2 border-t border-slate-100 dark:border-slate-700">
             <div className="flex gap-4">
               <button

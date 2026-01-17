@@ -18,7 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import Modal from "../ui/Modal";
-import { useEvents } from "../../context/PlannerContext";
+import { useEvents, useUI } from "../../context/PlannerContext";
 
 // --- Third Party Imports ---
 import CodeEditor from "react-simple-code-editor";
@@ -33,12 +33,8 @@ const Editor = CodeEditor.default || CodeEditor;
 // Helper: Collapsible Card (Stateful & Adaptive)
 // ==========================================
 const CollapsibleCard = ({ title, icon: Icon, children, className = "" }) => {
-  // RESTORED: Internal state for independence
   const [isOpen, setIsOpen] = useState(false);
 
-  // LOGIC: Adjust min-width based on state
-  // If Open: Wider (300px) to fit content.
-  // If Closed: Narrower (200px) to fit more tiles in a row.
   const sizeClasses = isOpen
     ? "min-w-[300px] ring-2 ring-blue-500/10 dark:ring-blue-400/10"
     : "min-w-[200px]";
@@ -67,9 +63,6 @@ const CollapsibleCard = ({ title, icon: Icon, children, className = "" }) => {
         />
       </button>
 
-      {/* Using a grid transition trick for smooth height animation 
-        (optional, but feels nicer with width changes)
-      */}
       <div
         className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
       >
@@ -214,108 +207,76 @@ const MergeContent = ({
 };
 
 // ==========================================
-// Sub-Component: Sync Room Content
+// Sub-Component: Sync Room Content (MODIFIED)
 // ==========================================
 const SyncRoomContent = () => {
-  const {
-    roomId,
-    setRoomId,
-    isHost,
-    peers,
-    roomPassword,
-    setRoomPassword,
-    syncError,
-  } = useEvents(); // Destructure new props
-  const [inputRoomId, setInputRoomId] = useState(roomId || "");
-  const [inputPassword, setInputPassword] = useState(roomPassword || "");
+  const { roomId, setRoomId, isHost, peers, setRoomPassword, syncError } =
+    useEvents();
+  const { setView, closeModal } = useUI();
 
-  // Update local input if global roomId changes
-  useEffect(() => {
-    if (roomId) setInputRoomId(roomId);
-  }, [roomId]);
-
-  const handleJoin = () => {
-    if (inputRoomId.trim()) {
-      setRoomPassword(inputPassword);
-      setRoomId(inputRoomId.trim());
-    }
-  };
-
-  const handleLeave = () => {
+  const handleLeaveAndSetup = () => {
     setRoomId(null);
     setRoomPassword("");
-    setInputRoomId("");
+    setView("setup");
+    closeModal("settings");
+  };
+
+  const handleConnect = () => {
+    setView("setup");
+    closeModal("settings");
   };
 
   return (
     <div className="space-y-3">
-      {/* Show Error if exists */}
       {syncError && (
         <div className="p-2 bg-red-100 dark:bg-red-900/30 text-red-600 text-xs rounded-lg">
           {syncError}
         </div>
       )}
 
-      <form className="flex flex-col gap-2">
-        <input
-          type="text"
-          value={inputRoomId}
-          onChange={(e) => setInputRoomId(e.target.value.toUpperCase())} // <--- FORCE UPPERCASE
-          placeholder="ENTER ROOM ID"
-          className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white uppercase"
-        />
-
-        {/* New Password Input */}
-        <input
-          type="password"
-          autoComplete="current-password"
-          value={inputPassword}
-          onChange={(e) => setInputPassword(e.target.value)}
-          placeholder="Room Password (Optional)"
-          className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white"
-        />
-
-        <button
-          onClick={handleJoin}
-          className="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 w-full"
-        >
-          Join / Switch Room
-        </button>
-      </form>
-
       {roomId ? (
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
-              Active Room: {roomId}
-            </span>
-            <button
-              onClick={handleLeave}
-              className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded"
-              title="Leave Room"
-            >
-              <LogOut className="w-3 h-3" />
-            </button>
-          </div>
-          <div className="flex flex-col gap-1 text-[10px] text-slate-500 dark:text-slate-400">
-            <div className="flex items-center gap-1">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  isHost ? "bg-green-500" : "bg-blue-400"
-                }`}
-              />
-              <span>Role: {isHost ? "Host" : "Peer"}</span>
+        <div className="space-y-2">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
+                Active Room: {roomId}
+              </span>
             </div>
-            <div className="flex items-center gap-1">
-              <Users className="w-3 h-3" />
-              <span>Peers connected: {peers ? peers.length : 0}</span>
+            <div className="flex flex-col gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+              <div className="flex items-center gap-1">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    isHost ? "bg-green-500" : "bg-blue-400"
+                  }`}
+                />
+                <span>Role: {isHost ? "Host" : "Peer"}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                <span>Peers connected: {peers ? peers.length : 0}</span>
+              </div>
             </div>
           </div>
+          <button
+            onClick={handleLeaveAndSetup}
+            className="w-full flex items-center justify-center gap-2 p-2 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 rounded-lg text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+          >
+            <LogOut className="w-3 h-3" /> Leave & Switch Room
+          </button>
         </div>
       ) : (
-        <p className="text-[10px] text-slate-400 text-center leading-tight">
-          Enter a Room ID to sync with others.
-        </p>
+        <div className="space-y-3">
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+            You are currently working offline. To create or join a multiplayer
+            room, please return to the setup screen.
+          </p>
+          <button
+            onClick={handleConnect}
+            className="w-full bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+          >
+            Go to Connection Setup
+          </button>
+        </div>
       )}
     </div>
   );
@@ -417,12 +378,10 @@ const ClassRow = ({ cls, color, onColorChange, onDelete, onRename }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(cls);
 
-  // Sync local state if prop changes (e.g. reset)
   useEffect(() => {
     setLocalColor(color);
   }, [color]);
 
-  // Debounce color updates to avoid lagging the UI
   useEffect(() => {
     const timer = setTimeout(() => {
       if (localColor !== color) {
