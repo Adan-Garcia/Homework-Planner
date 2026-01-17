@@ -1,8 +1,14 @@
-// src/utils/crypto.js
+/**
+ * src/utils/crypto.js
+ * Cryptographic utilities for the planner.
+ * * CHANGES:
+ * - Increased PBKDF2 iterations to 600,000 (OWASP Standard)
+ * - Added hashPassword for secure auth verification
+ */
 
 /**
  * Derives a cryptographic key from the Room Password using PBKDF2.
- * The Room ID is used as the salt to ensure rainbow table attacks are difficult.
+ * The Room ID is used as the salt.
  */
 export const deriveKey = async (password, salt) => {
   const enc = new TextEncoder();
@@ -18,7 +24,7 @@ export const deriveKey = async (password, salt) => {
     {
       name: "PBKDF2",
       salt: enc.encode(salt),
-      iterations: 100000,
+      iterations: 600000, // INCREASED for better security
       hash: "SHA-256",
     },
     keyMaterial,
@@ -29,15 +35,30 @@ export const deriveKey = async (password, salt) => {
 };
 
 /**
- * Encrypts an event object using AES-GCM.
- * Returns an object containing the IV and the encrypted data as Base64 strings.
+ * Creates a one-way hash of the password using the room ID as salt.
+ * Used for verifying room access without storing the actual password.
+ */
+export const hashPassword = async (password, salt) => {
+  const enc = new TextEncoder();
+  const data = enc.encode(password + salt); // Simple concatenation for salt
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
+
+  // Convert buffer to hex string
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return hashHex;
+};
+
+/**
+ * Encrypts a single event object using AES-GCM.
  */
 export const encryptEvent = async (eventData, key) => {
   const enc = new TextEncoder();
-  // We encrypt the stringified JSON of the event
   const encodedData = enc.encode(JSON.stringify(eventData));
 
-  // Generate a random IV (Initialization Vector) - 12 bytes is standard for GCM
+  // Generate a random IV (Initialization Vector) - 12 bytes
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
 
   const encryptedContent = await window.crypto.subtle.encrypt(
@@ -46,27 +67,21 @@ export const encryptEvent = async (eventData, key) => {
     encodedData,
   );
 
-  // Convert buffers to Base64 strings for storage in Firestore
   return {
     isEncrypted: true,
     iv: btoa(String.fromCharCode(...iv)),
     data: btoa(String.fromCharCode(...new Uint8Array(encryptedContent))),
-    // Keep ID unencrypted so we can still identify/delete docs easily in Firestore
     id: eventData.id,
   };
 };
 
 /**
  * Decrypts an encrypted event object.
- * Returns the original event object.
  */
 export const decryptEvent = async (encryptedData, key) => {
-  // Graceful fallback: If data isn't marked as encrypted, return it as-is.
-  // This helps if you have legacy data or mixed modes.
   if (!encryptedData.isEncrypted) return encryptedData;
 
   try {
-    // Convert Base64 back to Uint8Array
     const iv = new Uint8Array(
       atob(encryptedData.iv)
         .split("")
@@ -88,11 +103,9 @@ export const decryptEvent = async (encryptedData, key) => {
     const jsonString = dec.decode(decryptedContent);
     const parsed = JSON.parse(jsonString);
 
-    // Ensure the ID matches the doc ID (integrity check)
     return { ...parsed, id: encryptedData.id };
   } catch (e) {
     console.error("Decryption failed", e);
-    // Return a placeholder if decryption fails (e.g., wrong password)
     return {
       id: encryptedData.id,
       title: "🔒 Decryption Failed",

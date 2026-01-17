@@ -10,6 +10,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db, appId } from "../utils/firebase";
+import { hashPassword } from "../utils/crypto";
 
 export const useRoomAuth = (roomId, roomPassword, user) => {
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -51,26 +52,25 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
     const connectToRoom = async () => {
       try {
         const snapshot = await getDoc(roomRef);
+        const currentHash = await hashPassword(roomPassword || "", roomId);
 
         // 1. Validate or Create Room
         if (!snapshot.exists()) {
           // Room doesn't exist -> Create it -> User becomes Host
+          // Store HASH, not plaintext password
           await setDoc(roomRef, {
             created: serverTimestamp(),
             hostId: user.uid,
-            password: roomPassword || "", // In a real app, hash this!
-            classColors: {}, // Initialize empty
+            passwordHash: currentHash,
+            classColors: {},
           });
           setIsHost(true);
           setIsAuthorized(true);
         } else {
-          // Room exists -> Validate Password
+          // Room exists -> Validate Password Hash
           const data = snapshot.data();
 
-          // SECURITY NOTE: In a production app, this check should happen via
-          // a Cloud Function or Firestore Security Rules to prevent
-          // password leakage to the client.
-          if (data.password && data.password !== roomPassword) {
+          if (data.passwordHash && data.passwordHash !== currentHash) {
             setAuthError("Incorrect Room Password");
             setIsAuthorized(false);
             return;
@@ -81,7 +81,6 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
         }
 
         // 2. Register Presence (Peers)
-        // Update "lastActive" to show user is online
         await setDoc(
           doc(peersRef, user.uid),
           {
@@ -99,7 +98,7 @@ export const useRoomAuth = (roomId, roomPassword, user) => {
           setPeers(peerSnap.docs.map((d) => d.data()));
         });
 
-        // 4. Listen to Room Metadata (in case password/host changes)
+        // 4. Listen to Room Metadata (in case host changes or room deleted)
         unsubscribeRoom = onSnapshot(roomRef, (snap) => {
           if (!snap.exists()) {
             setAuthError("Room was deleted.");
