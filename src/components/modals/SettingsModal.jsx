@@ -15,7 +15,7 @@ import {
   Edit2,
   Check,
   X,
-  Users
+  Users,
 } from "lucide-react";
 import Modal from "../ui/Modal";
 import { useEvents } from "../../context/PlannerContext";
@@ -39,12 +39,12 @@ const CollapsibleCard = ({ title, icon: Icon, children, className = "" }) => {
   // LOGIC: Adjust min-width based on state
   // If Open: Wider (300px) to fit content.
   // If Closed: Narrower (200px) to fit more tiles in a row.
-  const sizeClasses = isOpen 
-    ? "min-w-[300px] ring-2 ring-blue-500/10 dark:ring-blue-400/10" 
+  const sizeClasses = isOpen
+    ? "min-w-[300px] ring-2 ring-blue-500/10 dark:ring-blue-400/10"
     : "min-w-[200px]";
 
   return (
-    <div 
+    <div
       className={`
         bg-slate-50 dark:bg-slate-700/30 rounded-xl border border-slate-100 dark:border-slate-600 overflow-hidden 
         transition-all duration-300 ease-in-out flex-1
@@ -57,25 +57,25 @@ const CollapsibleCard = ({ title, icon: Icon, children, className = "" }) => {
         className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
       >
         <span className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 whitespace-nowrap">
-          <Icon className={`w-4 h-4 ${isOpen ? 'text-blue-500' : 'text-slate-400'}`} /> 
+          <Icon
+            className={`w-4 h-4 ${isOpen ? "text-blue-500" : "text-slate-400"}`}
+          />
           {title}
         </span>
-        <ChevronDown 
-          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} 
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
-      
+
       {/* Using a grid transition trick for smooth height animation 
         (optional, but feels nicer with width changes)
       */}
-      <div 
-        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
       >
         <div className="overflow-hidden">
           <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-600/50">
-            <div className="pt-4">
-              {children}
-            </div>
+            <div className="pt-4">{children}</div>
           </div>
         </div>
       </div>
@@ -182,9 +182,9 @@ const MergeContent = ({
             </option>
           ))}
         </select>
-        
+
         <div className="flex justify-center">
-            <ArrowRightLeft className="w-3 h-3 text-slate-400 rotate-90" />
+          <ArrowRightLeft className="w-3 h-3 text-slate-400 rotate-90" />
         </div>
 
         <select
@@ -217,8 +217,17 @@ const MergeContent = ({
 // Sub-Component: Sync Room Content
 // ==========================================
 const SyncRoomContent = () => {
-  const { roomId, setRoomId, isHost, peers } = useEvents();
+  const {
+    roomId,
+    setRoomId,
+    isHost,
+    peers,
+    roomPassword,
+    setRoomPassword,
+    syncError,
+  } = useEvents(); // Destructure new props
   const [inputRoomId, setInputRoomId] = useState(roomId || "");
+  const [inputPassword, setInputPassword] = useState(roomPassword || "");
 
   // Update local input if global roomId changes
   useEffect(() => {
@@ -227,32 +236,52 @@ const SyncRoomContent = () => {
 
   const handleJoin = () => {
     if (inputRoomId.trim()) {
+      setRoomPassword(inputPassword);
       setRoomId(inputRoomId.trim());
     }
   };
 
   const handleLeave = () => {
     setRoomId(null);
+    setRoomPassword("");
     setInputRoomId("");
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
+      {/* Show Error if exists */}
+      {syncError && (
+        <div className="p-2 bg-red-100 dark:bg-red-900/30 text-red-600 text-xs rounded-lg">
+          {syncError}
+        </div>
+      )}
+
+      <form className="flex flex-col gap-2">
         <input
           type="text"
           value={inputRoomId}
-          onChange={(e) => setInputRoomId(e.target.value)}
-          placeholder="Enter Room ID"
+          onChange={(e) => setInputRoomId(e.target.value.toUpperCase())} // <--- FORCE UPPERCASE
+          placeholder="ENTER ROOM ID"
+          className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white uppercase"
+        />
+
+        {/* New Password Input */}
+        <input
+          type="password"
+          autoComplete="current-password"
+          value={inputPassword}
+          onChange={(e) => setInputPassword(e.target.value)}
+          placeholder="Room Password (Optional)"
           className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white"
         />
+
         <button
           onClick={handleJoin}
-          className="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 whitespace-nowrap"
+          className="bg-blue-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 w-full"
         >
-          Join / Switch
+          Join / Switch Room
         </button>
-      </div>
+      </form>
 
       {roomId ? (
         <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
@@ -304,7 +333,11 @@ const DateCleanerContent = ({ onCloseModal }) => {
     const targetDate = mode === "before" ? beforeDate : afterDate;
     if (!targetDate) return;
 
-    if (!window.confirm(`Are you sure you want to delete all events ${mode} ${targetDate}?`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete all events ${mode} ${targetDate}?`
+      )
+    ) {
       return;
     }
 
@@ -328,10 +361,12 @@ const DateCleanerContent = ({ onCloseModal }) => {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Delete Before</label>
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          Delete Before
+        </label>
         <div className="flex gap-2">
-          <input 
-            type="date" 
+          <input
+            type="date"
             value={beforeDate}
             onChange={(e) => setBeforeDate(e.target.value)}
             className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white"
@@ -347,10 +382,12 @@ const DateCleanerContent = ({ onCloseModal }) => {
       </div>
 
       <div className="space-y-2">
-        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Delete After</label>
+        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          Delete After
+        </label>
         <div className="flex gap-2">
-          <input 
-            type="date" 
+          <input
+            type="date"
             value={afterDate}
             onChange={(e) => setAfterDate(e.target.value)}
             className="w-full p-2 text-xs rounded-lg border border-slate-300 dark:border-slate-500 bg-white dark:bg-slate-600 text-slate-800 dark:text-white"
@@ -364,7 +401,7 @@ const DateCleanerContent = ({ onCloseModal }) => {
           </button>
         </div>
       </div>
-      
+
       <p className="text-[10px] text-slate-400 text-center leading-tight pt-1">
         This action is permanent.
       </p>
@@ -485,7 +522,12 @@ const ClassRow = ({ cls, color, onColorChange, onDelete, onRename }) => {
 // ==========================================
 // Sub-Component: Class Manager
 // ==========================================
-const ClassManager = ({ classColors, setClassColors, onDeleteClass, onRenameClass }) => {
+const ClassManager = ({
+  classColors,
+  setClassColors,
+  onDeleteClass,
+  onRenameClass,
+}) => {
   return (
     <section>
       <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-4 px-1">
@@ -582,7 +624,6 @@ const SettingsModal = ({
 }) => {
   const { events, renameClass } = useEvents();
 
-  
   useEffect(() => {
     if (showJsonEdit) {
       setJsonEditText(JSON.stringify(events, null, 2));
@@ -593,40 +634,29 @@ const SettingsModal = ({
     <>
       <Modal isOpen={isOpen} onClose={onClose} title="Data Management">
         <div className="space-y-6">
-
           <ClassManager
             classColors={classColors}
             setClassColors={setClassColors}
             onDeleteClass={deleteClass}
             onRenameClass={renameClass}
           />
-          
+
           <div className="border-t border-slate-100 dark:border-slate-700" />
 
           {/* Tools Grid using Flex-Wrap */}
           <div className="flex flex-wrap gap-4 align-top">
-            
-            <CollapsibleCard 
-              title="Import Data" 
-              icon={Upload}
-            >
-              <ImportContent 
-                onOpenJsonEditor={() => setShowJsonEdit(true)} 
+            <CollapsibleCard title="Import Data" icon={Upload}>
+              <ImportContent
+                onOpenJsonEditor={() => setShowJsonEdit(true)}
                 onCloseModal={onClose}
               />
             </CollapsibleCard>
 
-            <CollapsibleCard 
-              title="Sync Room" 
-              icon={Users}
-            >
+            <CollapsibleCard title="Sync Room" icon={Users}>
               <SyncRoomContent />
             </CollapsibleCard>
 
-            <CollapsibleCard 
-              title="Merge Classes" 
-              icon={Merge}
-            >
+            <CollapsibleCard title="Merge Classes" icon={Merge}>
               <MergeContent
                 classOptions={Object.keys(classColors)}
                 source={mergeSource}
@@ -637,13 +667,9 @@ const SettingsModal = ({
               />
             </CollapsibleCard>
 
-            <CollapsibleCard 
-              title="Clean Dates" 
-              icon={CalendarX}
-            >
+            <CollapsibleCard title="Clean Dates" icon={CalendarX}>
               <DateCleanerContent onCloseModal={onClose} />
             </CollapsibleCard>
-
           </div>
 
           <div className="border-t border-slate-100 dark:border-slate-700" />

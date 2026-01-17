@@ -16,9 +16,13 @@ import {
 } from "../utils/helpers";
 
 // --- Firebase Imports ---
-import { auth } from '../utils/firebase';
-import { signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { usePlannerSync } from '../hooks/usePlannerSync';
+import { auth } from "../utils/firebase";
+import {
+  signInAnonymously,
+  onAuthStateChanged,
+  signInWithCustomToken,
+} from "firebase/auth";
+import { usePlannerSync } from "../hooks/usePlannerSync";
 
 // --- Context Definitions ---
 const EventContext = createContext();
@@ -40,21 +44,33 @@ const loadState = (key, fallback) => {
 };
 
 export const EventProvider = ({ children }) => {
-  const [events, setEvents] = useState(() => loadState(STORAGE_KEYS.EVENTS, []));
-  const [classColors, setClassColors] = useState(() => loadState(STORAGE_KEYS.COLORS, {}));
-  const [hiddenClasses, setHiddenClasses] = useState(() => loadState(STORAGE_KEYS.HIDDEN, []));
+  const [events, setEvents] = useState(() =>
+    loadState(STORAGE_KEYS.EVENTS, [])
+  );
+  const [classColors, setClassColors] = useState(() =>
+    loadState(STORAGE_KEYS.COLORS, {})
+  );
+  const [hiddenClasses, setHiddenClasses] = useState(() =>
+    loadState(STORAGE_KEYS.HIDDEN, [])
+  );
 
   // Persistence
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events)); }, [events]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(classColors)); }, [classColors]);
-  useEffect(() => { localStorage.setItem(STORAGE_KEYS.HIDDEN, JSON.stringify(hiddenClasses)); }, [hiddenClasses]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
+  }, [events]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(classColors));
+  }, [classColors]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.HIDDEN, JSON.stringify(hiddenClasses));
+  }, [hiddenClasses]);
 
   // --- ICS Processing ---
   const processICSContent = useCallback((text) => {
     try {
-      const unfolded = unfoldLines(text); 
+      const unfolded = unfoldLines(text);
       const lines = unfolded.split(/\r\n|\n|\r/);
-      
+
       const newEvents = [];
       let currentEvent = null;
       let inEvent = false;
@@ -67,16 +83,25 @@ export const EventProvider = ({ children }) => {
           currentEvent = {};
         } else if (line.startsWith("END:VEVENT")) {
           if (currentEvent) {
-            const type = determineType(currentEvent.title, currentEvent.description);
-            const className = determineClass(currentEvent.location, currentEvent.title);
-            
+            const type = determineType(
+              currentEvent.title,
+              currentEvent.description
+            );
+            const className = determineClass(
+              currentEvent.location,
+              currentEvent.title
+            );
+
             currentEvent.type = type;
             currentEvent.class = className;
             currentEvent.color = PALETTE[type] || PALETTE.other;
-            
+
             if (className) foundClasses.add(className);
 
-            if (!currentEvent.id) currentEvent.id = (Date.now().toString(36) + Math.random().toString(36).substr(2, 5))
+            if (!currentEvent.id)
+              currentEvent.id =
+                Date.now().toString(36) +
+                Math.random().toString(36).substr(2, 5);
             newEvents.push(currentEvent);
           }
           inEvent = false;
@@ -91,22 +116,32 @@ export const EventProvider = ({ children }) => {
         }
       }
 
-      setClassColors(prevColors => {
+      setClassColors((prevColors) => {
         const updatedColors = { ...prevColors };
-        const defaultPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
+        const defaultPalette = [
+          "#3b82f6",
+          "#10b981",
+          "#f59e0b",
+          "#ef4444",
+          "#8b5cf6",
+          "#ec4899",
+          "#6366f1",
+          "#14b8a6",
+        ];
         let colorIndex = Object.keys(prevColors).length;
 
-        foundClasses.forEach(cls => {
-            if (!updatedColors[cls]) {
-                updatedColors[cls] = defaultPalette[colorIndex % defaultPalette.length];
-                colorIndex++;
-            }
+        foundClasses.forEach((cls) => {
+          if (!updatedColors[cls]) {
+            updatedColors[cls] =
+              defaultPalette[colorIndex % defaultPalette.length];
+            colorIndex++;
+          }
         });
         return updatedColors;
       });
 
-      setEvents(prev => {
-         return [...prev, ...newEvents];
+      setEvents((prev) => {
+        return [...prev, ...newEvents];
       });
 
       return { success: true, count: newEvents.length };
@@ -116,15 +151,16 @@ export const EventProvider = ({ children }) => {
     }
   }, []);
 
-  const openTaskModal = () => {}; 
+  const openTaskModal = () => {};
 
   // --- Collaboration State ---
   const [user, setUser] = useState(null);
   const [roomId, setRoomId] = useState(null);
+  const [roomPassword, setRoomPassword] = useState("");
 
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+      if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
         await signInAnonymously(auth);
@@ -134,41 +170,62 @@ export const EventProvider = ({ children }) => {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  const { isHost, peers, syncAction } = usePlannerSync(roomId, user, setEvents);
-
+  // 1. Pass setClassColors to the hook
+  const { isHost, peers, syncAction, syncError } = usePlannerSync(
+    roomId,
+    user,
+    setEvents,
+    setClassColors,
+    roomPassword
+  );
+  // 2. Broadcast Events AND Colors when becoming Host
+  useEffect(() => {
+    if (isHost) {
+      if (events.length > 0) {
+        console.log("📤 Host broadcasting events...");
+        syncAction("BULK", events);
+      }
+      // Add this block:
+      if (Object.keys(classColors).length > 0) {
+        console.log("📤 Host broadcasting colors...");
+        syncAction("COLORS", classColors);
+      }
+    }
+  }, [isHost]);
   const dispatchCalEvent = (type, payload) => {
-    setEvents(prev => {
-      if (type === 'ADD') return [...prev, payload];
-      if (type === 'UPDATE') return prev.map(e => e.id === payload.id ? payload : e);
-      if (type === 'DELETE') return prev.filter(e => e.id !== payload);
-      if (type === 'BULK') return payload; 
+    setEvents((prev) => {
+      if (type === "ADD") return [...prev, payload];
+      if (type === "UPDATE")
+        return prev.map((e) => (e.id === payload.id ? payload : e));
+      if (type === "DELETE") return prev.filter((e) => e.id !== payload);
+      if (type === "BULK") return payload;
       return prev;
     });
     syncAction(type, payload);
   };
 
   // --- Data Helper Wrappers ---
-  const addEvent = (event) => dispatchCalEvent('ADD', event);
-  const updateEvent = (event) => dispatchCalEvent('UPDATE', event);
-  const deleteEvent = (id) => dispatchCalEvent('DELETE', id);
-  
+  const addEvent = (event) => dispatchCalEvent("ADD", event);
+  const updateEvent = (event) => dispatchCalEvent("UPDATE", event);
+  const deleteEvent = (id) => dispatchCalEvent("DELETE", id);
+
   const toggleTaskCompletion = (id) => {
-    setEvents(prev => {
-      const task = prev.find(e => e.id === id);
+    setEvents((prev) => {
+      const task = prev.find((e) => e.id === id);
       if (task) {
-         return prev; 
+        return prev;
       }
       return prev;
     });
-    
-    const task = events.find(e => e.id === id);
+
+    const task = events.find((e) => e.id === id);
     if (task) {
-        updateEvent({ ...task, completed: !task.completed });
+      updateEvent({ ...task, completed: !task.completed });
     }
   };
 
   const resetAllData = () => {
-    dispatchCalEvent('BULK', []);
+    dispatchCalEvent("BULK", []);
     localStorage.removeItem(STORAGE_KEYS.EVENTS);
     setClassColors({});
     setHiddenClasses([]);
@@ -178,25 +235,34 @@ export const EventProvider = ({ children }) => {
     try {
       const data = JSON.parse(jsonString);
       if (Array.isArray(data)) {
-        dispatchCalEvent('BULK', append ? [...events, ...data] : data);
-        
-        const uniqueClasses = new Set(data.map(e => e.class).filter(Boolean));
-        setClassColors(prev => {
-            const next = { ...prev };
-            const palette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-            let idx = Object.keys(next).length;
-            uniqueClasses.forEach(c => {
-                if (!next[c]) {
-                    next[c] = palette[idx % palette.length];
-                    idx++;
-                }
-            });
-            return next;
+        dispatchCalEvent("BULK", append ? [...events, ...data] : data);
+
+        const uniqueClasses = new Set(data.map((e) => e.class).filter(Boolean));
+        setClassColors((prev) => {
+          const next = { ...prev };
+          const palette = [
+            "#3b82f6",
+            "#10b981",
+            "#f59e0b",
+            "#ef4444",
+            "#8b5cf6",
+          ];
+          let idx = Object.keys(next).length;
+          uniqueClasses.forEach((c) => {
+            if (!next[c]) {
+              next[c] = palette[idx % palette.length];
+              idx++;
+            }
+          });
+          return next;
         });
 
         return { success: true };
       }
-      return { success: false, error: "Invalid JSON format: Expected an array" };
+      return {
+        success: false,
+        error: "Invalid JSON format: Expected an array",
+      };
     } catch (e) {
       console.error("JSON Import failed", e);
       return { success: false, error: e.message };
@@ -219,11 +285,13 @@ export const EventProvider = ({ children }) => {
     delete newColors[className];
     setClassColors(newColors);
   };
-  
+
   const mergeClasses = (source, target) => {
-    setEvents(prev => {
-      const updated = prev.map(e => e.class === source ? { ...e, class: target } : e);
-      dispatchCalEvent('BULK', updated); 
+    setEvents((prev) => {
+      const updated = prev.map((e) =>
+        e.class === source ? { ...e, class: target } : e
+      );
+      dispatchCalEvent("BULK", updated);
       return updated;
     });
     deleteClass(source);
@@ -233,23 +301,29 @@ export const EventProvider = ({ children }) => {
     if (!oldName || !newName || oldName === newName) return;
 
     if (classColors[newName]) {
-        if (window.confirm(`Class "${newName}" already exists. Merge "${oldName}" into it?`)) {
-            mergeClasses(oldName, newName);
-        }
-        return;
+      if (
+        window.confirm(
+          `Class "${newName}" already exists. Merge "${oldName}" into it?`
+        )
+      ) {
+        mergeClasses(oldName, newName);
+      }
+      return;
     }
 
-    setEvents(prev => {
-      const updated = prev.map(e => e.class === oldName ? { ...e, class: newName } : e);
-      dispatchCalEvent('BULK', updated); 
+    setEvents((prev) => {
+      const updated = prev.map((e) =>
+        e.class === oldName ? { ...e, class: newName } : e
+      );
+      dispatchCalEvent("BULK", updated);
       return updated;
     });
 
-    setClassColors(prev => {
-        const next = { ...prev };
-        next[newName] = next[oldName];
-        delete next[oldName];
-        return next;
+    setClassColors((prev) => {
+      const next = { ...prev };
+      next[newName] = next[oldName];
+      delete next[oldName];
+      return next;
     });
   };
 
@@ -268,7 +342,7 @@ export const EventProvider = ({ children }) => {
         addEvent,
         updateEvent,
         deleteEvent,
-        toggleTaskCompletion, 
+        toggleTaskCompletion,
         importJsonData,
         exportICS,
         resetAllData,
@@ -278,8 +352,11 @@ export const EventProvider = ({ children }) => {
         user,
         roomId,
         setRoomId,
+        roomPassword, // <--- EXPORT
+        setRoomPassword, // <--- EXPORT
+        syncError,
         isHost,
-        peers
+        peers,
       }}
     >
       {children}
@@ -288,17 +365,21 @@ export const EventProvider = ({ children }) => {
 };
 
 export const UIProvider = ({ children }) => {
-  const [darkMode, setDarkMode] = useState(() => loadState(STORAGE_KEYS.THEME, false));
-  const [calendarView, setCalendarView] = useState(() => loadState(STORAGE_KEYS.CAL_MODE, "month"));
+  const [darkMode, setDarkMode] = useState(() =>
+    loadState(STORAGE_KEYS.THEME, false)
+  );
+  const [calendarView, setCalendarView] = useState(() =>
+    loadState(STORAGE_KEYS.CAL_MODE, "month")
+  );
   const [view, setView] = useState("setup");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   const [activeTypeFilter, setActiveTypeFilter] = useState("All");
-  
+
   const [showCompleted, setShowCompleted] = useState(true);
   const [hideOverdue, setHideOverdue] = useState(false);
-  
+
   const [modals, setModals] = useState({
     settings: false,
     task: false,
@@ -321,7 +402,8 @@ export const UIProvider = ({ children }) => {
   }, [darkMode]);
 
   const openModal = (name) => setModals((prev) => ({ ...prev, [name]: true }));
-  const closeModal = (name) => setModals((prev) => ({ ...prev, [name]: false }));
+  const closeModal = (name) =>
+    setModals((prev) => ({ ...prev, [name]: false }));
 
   const openTaskModal = (task = null) => {
     setEditingTask(task);
@@ -331,16 +413,28 @@ export const UIProvider = ({ children }) => {
   return (
     <UIContext.Provider
       value={{
-        darkMode, setDarkMode,
-        calendarView, setCalendarView,
-        view, setView,
-        currentDate, setCurrentDate,
-        searchQuery, setSearchQuery,
-        activeTypeFilter, setActiveTypeFilter,
-        showCompleted, setShowCompleted,
-        hideOverdue, setHideOverdue,
-        modals, openModal, closeModal,
-        editingTask, setEditingTask, openTaskModal
+        darkMode,
+        setDarkMode,
+        calendarView,
+        setCalendarView,
+        view,
+        setView,
+        currentDate,
+        setCurrentDate,
+        searchQuery,
+        setSearchQuery,
+        activeTypeFilter,
+        setActiveTypeFilter,
+        showCompleted,
+        setShowCompleted,
+        hideOverdue,
+        setHideOverdue,
+        modals,
+        openModal,
+        closeModal,
+        editingTask,
+        setEditingTask,
+        openTaskModal,
       }}
     >
       {children}

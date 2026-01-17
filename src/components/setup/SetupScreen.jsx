@@ -9,23 +9,31 @@ import {
   AlertCircle,
   Sun,
   Moon,
-  Users // Added Icon
+  Users,
+  Lock, // Added Icon
 } from "lucide-react";
 import Modal from "../ui/Modal";
 import { useEvents, useUI } from "../../context/PlannerContext";
 
 const SetupScreen = () => {
   // Added setRoomId to destructuring
-  const { processICSContent, setEvents, setRoomId } = useEvents(); 
-  const { darkMode, setDarkMode, setView, openModal, closeModal, modals } = useUI();
+  const {
+    processICSContent,
+    setEvents,
+    setRoomId,
+    setRoomPassword,
+    syncError,
+  } = useEvents();
+  const { darkMode, setDarkMode, setView, openModal, closeModal, modals } =
+    useUI();
 
   const [urlInput, setUrlInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  
+
   // New State for Room
   const [roomInput, setRoomInput] = useState("");
-
+  const [passwordInput, setPasswordInput] = useState("");
   // Handle File
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -63,17 +71,21 @@ const SetupScreen = () => {
   // NEW: Room Join Logic
   const handleJoinRoom = () => {
     if (!roomInput.trim()) return;
+    setRoomPassword(passwordInput);
     setRoomId(roomInput.toUpperCase());
     setView("planner");
   };
 
   const handleCreateRoom = () => {
     const newCode = Math.random().toString(36).substring(7).toUpperCase();
+    setRoomPassword(passwordInput); // Use entered password for new room
     setRoomId(newCode);
     setView("planner");
   };
 
-  const openJsonManual = () => { /* ... */ };
+  const openJsonManual = () => {
+    /* ... */
+  };
   const startEmpty = () => {
     setEvents([]);
     setView("planner");
@@ -86,7 +98,11 @@ const SetupScreen = () => {
           onClick={() => setDarkMode(!darkMode)}
           className="p-2 rounded-full bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all text-slate-600 dark:text-slate-300"
         >
-          {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          {darkMode ? (
+            <Sun className="w-5 h-5" />
+          ) : (
+            <Moon className="w-5 h-5" />
+          )}
         </button>
       </div>
 
@@ -99,7 +115,8 @@ const SetupScreen = () => {
             Academic Planner
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-lg max-w-lg mx-auto leading-relaxed">
-            Import your schedule to get started. We support standard ICS files from Canvas, Blackboard, or Google Calendar.
+            Import your schedule to get started. We support standard ICS files
+            from Canvas, Blackboard, or Google Calendar.
           </p>
         </div>
 
@@ -150,46 +167,76 @@ const SetupScreen = () => {
                 disabled={isLoading || !urlInput}
                 className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium flex items-center justify-center transition-colors"
               >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Fetch"}
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Fetch"
+                )}
               </button>
             </div>
           </div>
 
           {/* NEW: Collaboration Row (Minimal) */}
           <div className="md:col-span-2 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
-             <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-50 dark:bg-green-900/30 rounded-lg">
-                   <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div className="text-sm">
-                   <span className="font-semibold text-slate-800 dark:text-white block">Multiplayer</span>
-                   <span className="text-slate-500 dark:text-slate-400">Collaborate with peers in real-time.</span>
-                </div>
-             </div>
-             <div className="flex gap-2 w-full md:w-auto">
-                <input 
-                  type="text" 
-                  placeholder="Room Code" 
-                  value={roomInput}
-                  onChange={(e) => setRoomInput(e.target.value)}
-                  className="w-24 px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white uppercase outline-none focus:border-green-500"
-                />
-                <button 
-                   onClick={handleJoinRoom}
-                   disabled={!roomInput}
-                   className="px-4 py-2 text-sm font-medium text-white bg-slate-800 dark:bg-slate-700 rounded-lg hover:bg-slate-900 dark:hover:bg-slate-600 disabled:opacity-50"
-                >
-                   Join
-                </button>
-                <button 
-                   onClick={handleCreateRoom}
-                   className="px-4 py-2 text-sm font-medium text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40"
-                >
-                   Create
-                </button>
-             </div>
-          </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-50 dark:bg-green-900/30 rounded-lg">
+                <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div className="text-sm">
+                <span className="font-semibold text-slate-800 dark:text-white block">
+                  Multiplayer
+                </span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  Collaborate with peers in real-time.
+                </span>
+              </div>
+            </div>
+            <form className="flex flex-col md:flex-row gap-2 w-full md:w-auto items-end">
+              <input
+                type="text"
+                placeholder="ROOM CODE"
+                value={roomInput}
+                onChange={(e) => setRoomInput(e.target.value.toUpperCase())} // Force Caps
+                className="w-full md:w-32 px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white uppercase outline-none focus:border-green-500"
+              />
 
+              <div className="relative w-full md:w-32">
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full px-3 py-2 pl-8 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white outline-none focus:border-green-500"
+                />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-2 top-2.5" />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  onClick={handleJoinRoom}
+                  disabled={!roomInput}
+                  className="px-4 py-2 text-sm font-medium text-white bg-slate-800 dark:bg-slate-700 rounded-lg hover:bg-slate-900 dark:hover:bg-slate-600 disabled:opacity-50"
+                >
+                  Join
+                </button>
+                <button
+                  type="submit"
+                  onClick={handleCreateRoom}
+                  className="px-4 py-2 text-sm font-medium text-green-700 bg-green-50 dark:text-green-400 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40"
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+          {(error || syncError) && (
+            <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-xl flex items-center gap-3 border border-red-200">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">{error || syncError}</p>
+            </div>
+          )}
           {/* Footer Actions */}
           <div className="md:col-span-2 flex justify-center pt-2 border-t border-slate-100 dark:border-slate-700">
             <div className="flex gap-4">
