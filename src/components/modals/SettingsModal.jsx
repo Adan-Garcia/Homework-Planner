@@ -286,7 +286,8 @@ const SyncRoomContent = () => {
 // Sub-Component: Date Cleaner Content
 // ==========================================
 const DateCleanerContent = ({ onCloseModal }) => {
-  const { events, importJsonData } = useEvents();
+  // FIX: Destructure deleteEvent instead of importJsonData
+  const { events, deleteEvent } = useEvents();
   const [beforeDate, setBeforeDate] = useState("");
   const [afterDate, setAfterDate] = useState("");
 
@@ -294,29 +295,39 @@ const DateCleanerContent = ({ onCloseModal }) => {
     const targetDate = mode === "before" ? beforeDate : afterDate;
     if (!targetDate) return;
 
+    // 1. Identify which events to delete
+    const eventsToDelete = events.filter((ev) => {
+      // Keep events without dates
+      if (!ev.date) return false;
+
+      // Delete if strictly before target date
+      if (mode === "before") return ev.date < targetDate;
+
+      // Delete if strictly after target date
+      return ev.date > targetDate;
+    });
+
+    if (eventsToDelete.length === 0) {
+      alert("No events found in that range.");
+      return;
+    }
+
     if (
       !window.confirm(
-        `Are you sure you want to delete all events ${mode} ${targetDate}?`
+        `Are you sure you want to delete ${eventsToDelete.length} events ${mode} ${targetDate}?`
       )
     ) {
       return;
     }
 
-    const newEvents = events.filter((ev) => {
-      if (!ev.date) return true;
-      if (mode === "before") return ev.date >= targetDate;
-      return ev.date <= targetDate;
+    // 2. Explicitly delete each event
+    // This triggers the correct 'DELETE' sync action for each item
+    eventsToDelete.forEach((ev) => {
+      if (ev.id) deleteEvent(ev.id);
     });
 
-    const deletedCount = events.length - newEvents.length;
-
-    if (deletedCount > 0) {
-      importJsonData(JSON.stringify(newEvents), false);
-      alert(`Deleted ${deletedCount} events.`);
-      onCloseModal();
-    } else {
-      alert("No events found in that range.");
-    }
+    alert(`Deleted ${eventsToDelete.length} events.`);
+    onCloseModal();
   };
 
   return (

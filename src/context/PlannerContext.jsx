@@ -124,7 +124,6 @@ export const EventProvider = ({ children }) => {
 
               currentEvent.type = type;
               currentEvent.class = className;
-              currentEvent.color = PALETTE[type] || PALETTE.other;
 
               if (className) foundClasses.add(className);
 
