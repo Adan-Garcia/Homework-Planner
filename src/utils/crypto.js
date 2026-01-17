@@ -13,12 +13,12 @@ export const deriveKey = async (password, salt, purpose) => {
 
   if (purpose === "AUTH") {
     // For Auth, we derive a string hash (SHA-256 hex)
-    // We intermediate via a temporary key to get bits
+    // Updated to 600,000 iterations for OWASP compliance
     const tempKey = await window.crypto.subtle.deriveKey(
       {
         name: "PBKDF2",
         salt: saltBuffer,
-        iterations: 100000,
+        iterations: 600000,
         hash: "SHA-256",
       },
       keyMaterial,
@@ -27,7 +27,6 @@ export const deriveKey = async (password, salt, purpose) => {
       ["sign"],
     );
 
-    // Export key as raw bytes and hex stringify
     const exported = await window.crypto.subtle.exportKey("raw", tempKey);
     return Array.from(new Uint8Array(exported))
       .map((b) => b.toString(16).padStart(2, "0"))
@@ -38,7 +37,7 @@ export const deriveKey = async (password, salt, purpose) => {
       {
         name: "PBKDF2",
         salt: saltBuffer,
-        iterations: 100000,
+        iterations: 600000,
         hash: "SHA-256",
       },
       keyMaterial,
@@ -49,15 +48,17 @@ export const deriveKey = async (password, salt, purpose) => {
   }
 };
 
-/**
- * Encrypts a single event object using AES-GCM.
- */
+export const generateSalt = () => {
+  const array = new Uint8Array(16);
+  window.crypto.getRandomValues(array);
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+};
+
 export const encryptEvent = async (eventData, key) => {
   const enc = new TextEncoder();
-  // Ensure we stringify strictly as JSON
   const encodedData = enc.encode(JSON.stringify(eventData));
-
-  // Generate a random IV (Initialization Vector) - 12 bytes
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
 
   const encryptedContent = await window.crypto.subtle.encrypt(
@@ -74,11 +75,7 @@ export const encryptEvent = async (eventData, key) => {
   };
 };
 
-/**
- * Decrypts an encrypted event object.
- */
 export const decryptEvent = async (encryptedData, key) => {
-  // If raw data passed or not encrypted structure, return as is
   if (!encryptedData || !encryptedData.iv || !encryptedData.data)
     return encryptedData;
 
@@ -104,8 +101,6 @@ export const decryptEvent = async (encryptedData, key) => {
     const jsonString = dec.decode(decryptedContent);
     const parsed = JSON.parse(jsonString);
 
-    // IMPORTANT FIX: Return the parsed object directly.
-    // Do not assume it needs ID merging unless it's an object.
     if (typeof parsed === "object" && parsed !== null) {
       return { ...parsed, id: encryptedData.id };
     }
@@ -120,23 +115,5 @@ export const decryptEvent = async (encryptedData, key) => {
       class: "System",
       type: "Error",
     };
-  }
-};
-export const createAccessChallenge = async (password, roomId) => {
-  const key = await deriveKey(password, roomId);
-  // Encrypt a simple validation token
-  return encryptEvent({ challenge: "ACCESS_OK" }, key);
-};
-export const verifyAccessChallenge = async (
-  password,
-  roomId,
-  encryptedChallenge,
-) => {
-  try {
-    const key = await deriveKey(password, roomId);
-    const decrypted = await decryptEvent(encryptedChallenge, key);
-    return decrypted.challenge === "ACCESS_OK";
-  } catch (e) {
-    return false;
   }
 };
