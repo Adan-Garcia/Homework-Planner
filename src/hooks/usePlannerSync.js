@@ -16,7 +16,7 @@ export const usePlannerSync = (roomId, user, setEvents) => {
   useEffect(() => {
     if (!roomId || !user) return;
 
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', `rooms_${roomId}`);
+    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', roomId);
     const peersRef = collection(db, 'artifacts', appId, 'public', 'data', `rooms_${roomId}_peers`);
     const myPeerRef = doc(peersRef, user.uid);
 
@@ -43,9 +43,10 @@ export const usePlannerSync = (roomId, user, setEvents) => {
 
         // If I am oldest and host is missing/wrong, I take over
         if (oldestPeer.uid === user.uid && currentHostId !== user.uid) {
-           console.log("👑 Taking over as Host");
-           updateDoc(roomRef, { hostId: user.uid });
-           setIsHost(true);
+          console.log("👑 Taking over as Host");
+          // FIX: Use setDoc with merge: true to create the doc if missing
+          setDoc(roomRef, { hostId: user.uid }, { merge: true });
+          setIsHost(true);
         } else {
            setIsHost(oldestPeer.uid === user.uid);
         }
