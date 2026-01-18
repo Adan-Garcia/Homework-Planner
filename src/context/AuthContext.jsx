@@ -4,6 +4,7 @@ import React, {
   useState,
   useEffect,
   useMemo,
+  useCallback,
 } from "react";
 import { useRoomAuth } from "../hooks/useRoomAuth";
 
@@ -31,16 +32,15 @@ export const AuthProvider = ({ children }) => {
     else localStorage.removeItem("planner_curr_room_id");
   }, [roomId]);
 
-  // SECURITY FIX: Removed useEffect that saved password to LocalStorage
-
   const { isAuthorized, authToken, cryptoKey, authError, isNewRoom } =
     useRoomAuth(roomId, roomPassword);
 
-  const disconnectRoom = () => {
+  // REFACTOR: Wrap in useCallback to prevent stale closure / unnecessary re-renders
+  const disconnectRoom = useCallback(() => {
     setRoomId(null);
     setRoomPassword("");
     localStorage.removeItem("planner_curr_room_id");
-  };
+  }, []);
 
   // MEMOIZATION FIX: Prevent context consumers from re-rendering on every parent render
   const value = useMemo(
@@ -64,6 +64,7 @@ export const AuthProvider = ({ children }) => {
       cryptoKey,
       authError,
       isNewRoom,
+      disconnectRoom, // Added to dependency array
     ],
   );
 

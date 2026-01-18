@@ -203,7 +203,6 @@ export const useSocketSync = (
 
       try {
         const encrypted = await encryptEvent(event, cryptoKey);
-        // UPDATED: Now properly awaits server acknowledgement
         await emitAsync("event:save", { roomId, event: encrypted });
       } catch (err) {
         console.error("Sync failed:", err);
@@ -290,9 +289,6 @@ export const useSocketSync = (
   const syncColors = useCallback(
     async (colors) => {
       if (!socket) return;
-      // Note: We don't usually optimistic update colors locally here
-      // because they are often driven by state passed into this hook.
-      // If you do, implement similar rollback logic.
       try {
         await emitAsync("meta:save", { roomId, meta: { classColors: colors } });
       } catch (err) {
@@ -302,5 +298,31 @@ export const useSocketSync = (
     [socket, roomId],
   );
 
-  return { addEvent, updateEvent, deleteEvent, syncColors, bulkAddEvents };
+  // NEW: Helper to clear all events on server
+  const clearAllEvents = useCallback(async () => {
+    if (!socket) return;
+
+    // Optimistic Clear
+    setEvents([]);
+
+    try {
+      // Since no bulk-delete endpoint exists, we iterate known IDs
+      const eventsToDelete = localEventsRef.current || [];
+      const deletePromises = eventsToDelete.map((e) =>
+        emitAsync("event:delete", { roomId, eventId: e.id }),
+      );
+      await Promise.all(deletePromises);
+    } catch (err) {
+      console.error("Clear all failed:", err);
+    }
+  }, [socket, roomId, setEvents]);
+
+  return {
+    addEvent,
+    updateEvent,
+    deleteEvent,
+    syncColors,
+    bulkAddEvents,
+    clearAllEvents,
+  };
 };

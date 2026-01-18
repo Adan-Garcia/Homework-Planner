@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import { useAuth } from "./AuthContext";
 import { useSocketSync } from "../hooks/useSocketSync";
@@ -38,6 +39,13 @@ export const DataProvider = ({ children }) => {
     loadState(STORAGE_KEYS.HIDDEN, []),
   );
 
+  // REF OPTIMIZATION: Keep a ref to events to access them in callbacks
+  // without triggering dependency changes (fixes toggleTaskCompletion re-renders)
+  const eventsRef = useRef(events);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
   useEffect(
     () => localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events)),
     [events],
@@ -59,6 +67,7 @@ export const DataProvider = ({ children }) => {
     deleteEvent: serverDelete,
     syncColors,
     bulkAddEvents: serverBulkAdd,
+    clearAllEvents: serverClear,
   } = useSocketSync(
     roomId,
     authToken,
@@ -114,11 +123,8 @@ export const DataProvider = ({ children }) => {
 
   const toggleTaskCompletion = useCallback(
     (id) => {
-      // NOTE: We can't easily memoize this unless we pass it to useCallback.
-      // Since it depends on 'events', it will update often, but that's acceptable.
-      // To strictly memoize, we'd need functional state updates or ref access,
-      // but for now, wrapping in useCallback is sufficient.
-      const task = events.find((e) => e.id === id);
+      // PERFORMANCE FIX: Use Ref to find task instead of depending on 'events' array
+      const task = eventsRef.current.find((e) => e.id === id);
       if (task) {
         if (isAuthorized) serverUpdate({ ...task, completed: !task.completed });
         else
@@ -129,7 +135,7 @@ export const DataProvider = ({ children }) => {
           );
       }
     },
-    [events, isAuthorized, serverUpdate],
+    [isAuthorized, serverUpdate], // 'events' removed from dependency
   );
 
   const deleteClass = useCallback(
@@ -183,7 +189,11 @@ export const DataProvider = ({ children }) => {
       try {
         const data = JSON.parse(jsonString);
         if (Array.isArray(data)) {
-          if (!append && !isAuthorized) setEvents([]);
+          if (!append) {
+            // LOGIC FIX: Explicitly clear server events if overwriting online
+            if (isAuthorized) serverClear();
+            else setEvents([]);
+          }
           bulkAddEvents(data);
           return { success: true };
         }
@@ -193,7 +203,7 @@ export const DataProvider = ({ children }) => {
         return { success: false, error: e.message };
       }
     },
-    [bulkAddEvents, isAuthorized],
+    [bulkAddEvents, isAuthorized, serverClear],
   );
 
   const exportICS = useCallback(() => {
@@ -228,7 +238,6 @@ export const DataProvider = ({ children }) => {
     localStorage.removeItem(STORAGE_KEYS.EVENTS);
   }, []);
 
-  // MEMOIZATION FIX
   const value = useMemo(
     () => ({
       events,
