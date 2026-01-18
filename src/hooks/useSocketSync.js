@@ -301,17 +301,14 @@ export const useSocketSync = (
   // NEW: Helper to clear all events on server
   const clearAllEvents = useCallback(async () => {
     if (!socket) return;
-
-    // Optimistic Clear
-    setEvents([]);
+    setEvents([]); // Optimistic clear
 
     try {
-      // Since no bulk-delete endpoint exists, we iterate known IDs
       const eventsToDelete = localEventsRef.current || [];
-      const deletePromises = eventsToDelete.map((e) =>
-        emitAsync("event:delete", { roomId, eventId: e.id }),
-      );
-      await Promise.all(deletePromises);
+      const eventIds = eventsToDelete.map((e) => e.id);
+
+      // NOW: Single network request instead of 500
+      await emitAsync("event:bulk_delete", { roomId, eventIds });
     } catch (err) {
       console.error("Clear all failed:", err);
     }
