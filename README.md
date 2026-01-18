@@ -10,7 +10,7 @@ Welcome to the **Homework Planner**! This is a secure tool designed to keep your
 ### 🌟 Try it now
 
 No installation required. Access your private planner from any browser:
-👉 **[planner.adangarcia.com](https://www.google.com/search?q=https://planner.adangarcia.com)**
+👉 **[planner.adangarcia.com](https://planner.adangarcia.com)**
 
 ---
 
