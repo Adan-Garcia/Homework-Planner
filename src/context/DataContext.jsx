@@ -4,6 +4,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useMemo,
 } from "react";
 import { useAuth } from "./AuthContext";
 import { useSocketSync } from "../hooks/useSocketSync";
@@ -37,7 +38,6 @@ export const DataProvider = ({ children }) => {
     loadState(STORAGE_KEYS.HIDDEN, []),
   );
 
-  // Persistence
   useEffect(
     () => localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events)),
     [events],
@@ -53,7 +53,6 @@ export const DataProvider = ({ children }) => {
     [hiddenClasses],
   );
 
-  // Hook up Socket Sync
   const {
     addEvent: serverAdd,
     updateEvent: serverUpdate,
@@ -70,8 +69,6 @@ export const DataProvider = ({ children }) => {
     events,
     classColors,
   );
-
-  // --- CRUD WRAPPERS ---
 
   const addEvent = useCallback(
     (event) => {
@@ -115,52 +112,78 @@ export const DataProvider = ({ children }) => {
     [isAuthorized, syncColors],
   );
 
-  // --- HELPER ACTIONS ---
+  const toggleTaskCompletion = useCallback(
+    (id) => {
+      // NOTE: We can't easily memoize this unless we pass it to useCallback.
+      // Since it depends on 'events', it will update often, but that's acceptable.
+      // To strictly memoize, we'd need functional state updates or ref access,
+      // but for now, wrapping in useCallback is sufficient.
+      const task = events.find((e) => e.id === id);
+      if (task) {
+        if (isAuthorized) serverUpdate({ ...task, completed: !task.completed });
+        else
+          setEvents((prev) =>
+            prev.map((e) =>
+              e.id === id ? { ...e, completed: !e.completed } : e,
+            ),
+          );
+      }
+    },
+    [events, isAuthorized, serverUpdate],
+  );
 
-  const toggleTaskCompletion = (id) => {
-    const task = events.find((e) => e.id === id);
-    if (task) {
-      updateEvent({ ...task, completed: !task.completed });
-    }
-  };
+  const deleteClass = useCallback(
+    (className) => {
+      const newColors = { ...classColors };
+      delete newColors[className];
+      handleSetClassColors(newColors);
+    },
+    [classColors, handleSetClassColors],
+  );
 
-  const deleteClass = (className) => {
-    const newColors = { ...classColors };
-    delete newColors[className];
-    handleSetClassColors(newColors);
-  };
+  const mergeClasses = useCallback(
+    (source, target) => {
+      const tasksToUpdate = events.filter((e) => e.class === source);
+      tasksToUpdate.forEach((task) => {
+        // Optimistic handled by sub-function
+        if (isAuthorized) serverUpdate({ ...task, class: target });
+        else
+          setEvents((prev) =>
+            prev.map((e) => (e.id === task.id ? { ...e, class: target } : e)),
+          );
+      });
+      const newColors = { ...classColors };
+      delete newColors[source];
+      handleSetClassColors(newColors);
+    },
+    [events, classColors, handleSetClassColors, isAuthorized, serverUpdate],
+  );
 
-  const mergeClasses = (source, target) => {
-    const tasksToUpdate = events.filter((e) => e.class === source);
-    // Optimistic loop update
-    tasksToUpdate.forEach((task) => {
-      updateEvent({ ...task, class: target });
-    });
-    const newColors = { ...classColors };
-    delete newColors[source];
-    handleSetClassColors(newColors);
-  };
-
-  const renameClass = (oldName, newName) => {
-    if (!oldName || !newName || oldName === newName) return;
-    const tasksToUpdate = events.filter((e) => e.class === oldName);
-    tasksToUpdate.forEach((task) => {
-      updateEvent({ ...task, class: newName });
-    });
-    const next = { ...classColors };
-    next[newName] = next[oldName];
-    delete next[oldName];
-    handleSetClassColors(next);
-  };
+  const renameClass = useCallback(
+    (oldName, newName) => {
+      if (!oldName || !newName || oldName === newName) return;
+      const tasksToUpdate = events.filter((e) => e.class === oldName);
+      tasksToUpdate.forEach((task) => {
+        if (isAuthorized) serverUpdate({ ...task, class: newName });
+        else
+          setEvents((prev) =>
+            prev.map((e) => (e.id === task.id ? { ...e, class: newName } : e)),
+          );
+      });
+      const next = { ...classColors };
+      next[newName] = next[oldName];
+      delete next[oldName];
+      handleSetClassColors(next);
+    },
+    [events, classColors, handleSetClassColors, isAuthorized, serverUpdate],
+  );
 
   const importJsonData = useCallback(
     (jsonString, append = false) => {
       try {
         const data = JSON.parse(jsonString);
         if (Array.isArray(data)) {
-          if (!append && !isAuthorized) setEvents([]); // Reset if not appending and local
-          // If authorized, serverBulkAdd handles the sync, but we might want to clear first if not append?
-          // For safety, this logic keeps it simple:
+          if (!append && !isAuthorized) setEvents([]);
           bulkAddEvents(data);
           return { success: true };
         }
@@ -173,7 +196,7 @@ export const DataProvider = ({ children }) => {
     [bulkAddEvents, isAuthorized],
   );
 
-  const exportICS = () => {
+  const exportICS = useCallback(() => {
     const content = generateICS(events);
     const blob = new Blob([content], { type: "text/calendar" });
     const url = URL.createObjectURL(blob);
@@ -182,7 +205,7 @@ export const DataProvider = ({ children }) => {
     a.download = "planner.ics";
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [events]);
 
   const handleProcessICS = useCallback(
     (text) => {
@@ -198,38 +221,56 @@ export const DataProvider = ({ children }) => {
     [classColors, handleSetClassColors, isAuthorized, bulkAddEvents],
   );
 
-  const resetAllData = () => {
+  const resetAllData = useCallback(() => {
     setEvents([]);
     setClassColors({});
     setHiddenClasses([]);
     localStorage.removeItem(STORAGE_KEYS.EVENTS);
-  };
+  }, []);
 
-  return (
-    <DataContext.Provider
-      value={{
-        events,
-        setEvents,
-        classColors,
-        setClassColors: handleSetClassColors,
-        hiddenClasses,
-        setHiddenClasses,
-        addEvent,
-        updateEvent,
-        deleteEvent,
-        bulkAddEvents,
-        toggleTaskCompletion,
-        deleteClass,
-        mergeClasses,
-        renameClass,
-        importJsonData,
-        exportICS,
-        processICSContent: handleProcessICS,
-        resetAllData,
-        isAuthorized, // Exposed for UI checks
-      }}
-    >
-      {children}
-    </DataContext.Provider>
+  // MEMOIZATION FIX
+  const value = useMemo(
+    () => ({
+      events,
+      setEvents,
+      classColors,
+      setClassColors: handleSetClassColors,
+      hiddenClasses,
+      setHiddenClasses,
+      addEvent,
+      updateEvent,
+      deleteEvent,
+      bulkAddEvents,
+      toggleTaskCompletion,
+      deleteClass,
+      mergeClasses,
+      renameClass,
+      importJsonData,
+      exportICS,
+      processICSContent: handleProcessICS,
+      resetAllData,
+      isAuthorized,
+    }),
+    [
+      events,
+      classColors,
+      hiddenClasses,
+      handleSetClassColors,
+      addEvent,
+      updateEvent,
+      deleteEvent,
+      bulkAddEvents,
+      toggleTaskCompletion,
+      deleteClass,
+      mergeClasses,
+      renameClass,
+      importJsonData,
+      exportICS,
+      handleProcessICS,
+      resetAllData,
+      isAuthorized,
+    ],
   );
+
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

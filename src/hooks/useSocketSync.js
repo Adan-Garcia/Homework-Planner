@@ -209,7 +209,6 @@ export const useSocketSync = (
         console.error("Sync failed:", err);
         // Rollback
         setEvents((prev) => prev.filter((e) => e.id !== event.id));
-        alert("Failed to save event. Changes reverted.");
       }
     },
     [socket, cryptoKey, roomId, setEvents],
@@ -232,7 +231,6 @@ export const useSocketSync = (
         // Rollback
         const newIds = new Set(events.map((e) => e.id));
         setEvents((prev) => prev.filter((e) => !newIds.has(e.id)));
-        alert("Failed to save events. Changes reverted.");
       }
     },
     [socket, cryptoKey, roomId, setEvents],
@@ -260,7 +258,6 @@ export const useSocketSync = (
             prev.map((e) => (e.id === event.id ? previousEvent : e)),
           );
         }
-        alert("Failed to update event. Changes reverted.");
       }
     },
     [socket, cryptoKey, roomId, setEvents],
@@ -285,7 +282,6 @@ export const useSocketSync = (
         if (deletedEvent) {
           setEvents((prev) => [...prev, deletedEvent]);
         }
-        alert("Failed to delete event. Changes reverted.");
       }
     },
     [socket, roomId, setEvents],

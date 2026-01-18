@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+} from "react";
 import { useRoomAuth } from "../hooks/useRoomAuth";
 
 const AuthContext = createContext();
@@ -6,7 +12,7 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  // TODO: Refactor this to SessionStorage or Memory when UI permits
+  // Persist Room ID so we know where to return, but DO NOT persist password
   const [roomId, setRoomId] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("planner_curr_room_id"));
@@ -15,29 +21,17 @@ export const AuthProvider = ({ children }) => {
     }
   });
 
-  const [roomPassword, setRoomPassword] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("planner_curr_room_pass"));
-    } catch {
-      return "";
-    }
-  });
+  // SECURITY FIX: Initialize empty, do not read from LocalStorage
+  const [roomPassword, setRoomPassword] = useState("");
 
-  // Persist (Legacy placeholder logic)
+  // Persist Room ID only
   useEffect(() => {
     if (roomId)
       localStorage.setItem("planner_curr_room_id", JSON.stringify(roomId));
     else localStorage.removeItem("planner_curr_room_id");
   }, [roomId]);
 
-  useEffect(() => {
-    if (roomPassword)
-      localStorage.setItem(
-        "planner_curr_room_pass",
-        JSON.stringify(roomPassword),
-      );
-    else localStorage.removeItem("planner_curr_room_pass");
-  }, [roomPassword]);
+  // SECURITY FIX: Removed useEffect that saved password to LocalStorage
 
   const { isAuthorized, authToken, cryptoKey, authError, isNewRoom } =
     useRoomAuth(roomId, roomPassword);
@@ -45,27 +39,33 @@ export const AuthProvider = ({ children }) => {
   const disconnectRoom = () => {
     setRoomId(null);
     setRoomPassword("");
-    // Clear legacy storage
     localStorage.removeItem("planner_curr_room_id");
-    localStorage.removeItem("planner_curr_room_pass");
   };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        roomId,
-        setRoomId,
-        roomPassword,
-        setRoomPassword,
-        isAuthorized,
-        authToken,
-        cryptoKey,
-        authError,
-        isNewRoom,
-        disconnectRoom,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  // MEMOIZATION FIX: Prevent context consumers from re-rendering on every parent render
+  const value = useMemo(
+    () => ({
+      roomId,
+      setRoomId,
+      roomPassword,
+      setRoomPassword,
+      isAuthorized,
+      authToken,
+      cryptoKey,
+      authError,
+      isNewRoom,
+      disconnectRoom,
+    }),
+    [
+      roomId,
+      roomPassword,
+      isAuthorized,
+      authToken,
+      cryptoKey,
+      authError,
+      isNewRoom,
+    ],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
