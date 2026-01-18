@@ -94,4 +94,4 @@ npm run build
 
 ---
 
-**Disclaimer:** This README documentation was generated with the assistance of AI. The application code was manually authored by the developer.
+**Disclaimer:** This README documentation was generated with the assistance of AI. BUt The application code was written by Adan Garcia.
