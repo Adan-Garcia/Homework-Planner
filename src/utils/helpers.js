@@ -113,14 +113,14 @@ export const formatTime = (timeStr) => {
 };
 
 export const addDaysToDate = (dateStr, days) => {
-  // Safe date addition handling timezones correctly
+  
   const date = new Date(dateStr + "T00:00:00");
   const newDate = addDays(date, days);
   return format(newDate, "yyyy-MM-dd");
 };
 
 export const getWeekDates = (baseDate) => {
-  const start = startOfWeek(baseDate); // defaults to Sunday start
+  const start = startOfWeek(baseDate); 
   const days = [];
   for (let i = 0; i < 7; i++) {
     days.push(format(addDays(start, i), "yyyy-MM-dd"));

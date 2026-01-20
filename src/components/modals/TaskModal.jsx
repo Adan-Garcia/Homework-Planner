@@ -7,9 +7,8 @@ import { useData } from "../../context/DataContext";
 import { addDaysToDate } from "../../utils/helpers";
 
 const TaskModal = ({ requestDelete, saveTask }) => {
-  // Accept props from App.jsx
   const { modals, closeModal, editingTask } = useUI();
-  const { addEvent, updateEvent, classColors } = useData(); // Remove deleteEvent here, use prop
+  const { addEvent, updateEvent, classColors } = useData(); 
 
   const isOpen = modals.task;
   const onClose = () => closeModal("task");

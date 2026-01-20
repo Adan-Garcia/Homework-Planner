@@ -113,7 +113,7 @@ const CalendarView = ({ filteredEvents: propFilteredEvents }) => {
       const firstDayIndex = getDay(start);
       const days = [];
 
-      // Pad with nulls for empty slots at start of month
+      
       for (let i = 0; i < firstDayIndex; i++) days.push(null);
 
       monthDays.forEach((day) => {
