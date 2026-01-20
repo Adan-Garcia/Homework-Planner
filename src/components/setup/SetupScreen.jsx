@@ -15,18 +15,16 @@ import {
 import Modal from "../ui/Modal";
 import { useUI } from "../../context/PlannerContext";
 import { useData } from "../../context/DataContext";
-import { useAuth } from "../../context/AuthContext"; // Added import
+import { useAuth } from "../../context/AuthContext"; 
 
 const SetupScreen = () => {
   const {
     processICSContent,
     setEvents,
-    // setRoomId,       <-- Removed (moved to useAuth)
-    // setRoomPassword, <-- Removed (moved to useAuth)
-    // syncError,       <-- Removed (replaced by authError)
+    
   } = useData();
 
-  // Added useAuth hook to access room state and auth errors
+ 
   const { setRoomId, setRoomPassword, authError } = useAuth();
 
   const { darkMode, setDarkMode, setView, openModal, closeModal, modals } =
@@ -240,7 +238,7 @@ const SetupScreen = () => {
           </div>
           {(error || authError) && (
             <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-xl flex items-center gap-3 border border-red-200">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <AlertCircle className="w-5 h-5 shrink-0" />
               <p className="text-sm">{error || authError}</p>
             </div>
           )}
@@ -264,7 +262,7 @@ const SetupScreen = () => {
 
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-xl flex items-center gap-3 border border-red-200">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <AlertCircle className="w-5 h-5 shrink-0" />
             <p className="text-sm">{error}</p>
           </div>
         )}

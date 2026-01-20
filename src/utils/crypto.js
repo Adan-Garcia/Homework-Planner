@@ -8,12 +8,12 @@ export const deriveKey = async (password, salt, purpose) => {
     ["deriveKey"],
   );
 
-  // We append the purpose to the salt to create unique keys
+  
   const saltBuffer = enc.encode(salt + purpose);
 
   if (purpose === "AUTH") {
-    // For Auth, we derive a string hash (SHA-256 hex)
-    // Updated to 600,000 iterations for OWASP compliance
+    
+    
     const tempKey = await window.crypto.subtle.deriveKey(
       {
         name: "PBKDF2",
@@ -32,7 +32,7 @@ export const deriveKey = async (password, salt, purpose) => {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   } else {
-    // For Data, we derive an AES-GCM Key
+    
     return window.crypto.subtle.deriveKey(
       {
         name: "PBKDF2",

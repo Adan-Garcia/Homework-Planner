@@ -39,8 +39,8 @@ export const DataProvider = ({ children }) => {
     loadState(STORAGE_KEYS.HIDDEN, []),
   );
 
-  // REF OPTIMIZATION: Keep a ref to events to access them in callbacks
-  // without triggering dependency changes (fixes toggleTaskCompletion re-renders)
+  
+  
   const eventsRef = useRef(events);
   useEffect(() => {
     eventsRef.current = events;
@@ -123,7 +123,7 @@ export const DataProvider = ({ children }) => {
 
   const toggleTaskCompletion = useCallback(
     (id) => {
-      // PERFORMANCE FIX: Use Ref to find task instead of depending on 'events' array
+      
       const task = eventsRef.current.find((e) => e.id === id);
       if (task) {
         if (isAuthorized) serverUpdate({ ...task, completed: !task.completed });
@@ -135,7 +135,7 @@ export const DataProvider = ({ children }) => {
           );
       }
     },
-    [isAuthorized, serverUpdate], // 'events' removed from dependency
+    [isAuthorized, serverUpdate], 
   );
 
   const deleteClass = useCallback(
@@ -151,7 +151,7 @@ export const DataProvider = ({ children }) => {
     (source, target) => {
       const tasksToUpdate = events.filter((e) => e.class === source);
       tasksToUpdate.forEach((task) => {
-        // Optimistic handled by sub-function
+        
         if (isAuthorized) serverUpdate({ ...task, class: target });
         else
           setEvents((prev) =>
@@ -190,7 +190,7 @@ export const DataProvider = ({ children }) => {
         const data = JSON.parse(jsonString);
         if (Array.isArray(data)) {
           if (!append) {
-            // LOGIC FIX: Explicitly clear server events if overwriting online
+            
             if (isAuthorized) serverClear();
             else setEvents([]);
           }

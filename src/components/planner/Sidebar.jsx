@@ -47,7 +47,7 @@ const Sidebar = ({
       completed: [],
     };
 
-    // FIX 4: Updated Sort Logic (Priority > Time)
+    
     const getPriorityWeight = (p) => {
       if (p === "High") return 3;
       if (p === "Medium") return 2;
@@ -58,12 +58,12 @@ const Sidebar = ({
       const dateDiff = new Date(a.date) - new Date(b.date);
       if (dateDiff !== 0) return dateDiff;
 
-      // Sort by Priority (High to Low)
+      
       const pA = getPriorityWeight(a.priority || "Medium");
       const pB = getPriorityWeight(b.priority || "Medium");
       if (pA !== pB) return pB - pA;
 
-      // Handle All Day vs Timed
+      
       if (!a.time && b.time) return -1;
       if (a.time && !b.time) return 1;
       if (!a.time && !b.time) return a.title.localeCompare(b.title);

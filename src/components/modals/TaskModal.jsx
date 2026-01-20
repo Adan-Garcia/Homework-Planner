@@ -7,9 +7,8 @@ import { useData } from "../../context/DataContext";
 import { addDaysToDate } from "../../utils/helpers";
 
 const TaskModal = ({ requestDelete, saveTask }) => {
-  // Accept props from App.jsx
   const { modals, closeModal, editingTask } = useUI();
-  const { addEvent, updateEvent, classColors } = useData(); // Remove deleteEvent here, use prop
+  const { addEvent, updateEvent, classColors } = useData(); 
 
   const isOpen = modals.task;
   const onClose = () => closeModal("task");
@@ -65,7 +64,7 @@ const TaskModal = ({ requestDelete, saveTask }) => {
           </div>
 
           <div className="relative">
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex justify-between">
+            <label className="text-xs font-bold text-slate-500 uppercase mb-1 flex justify-between">
               <span>Time</span>
               <div className="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -154,14 +153,14 @@ const TaskModal = ({ requestDelete, saveTask }) => {
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+          <label className="text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
             <AlignLeft className="w-3 h-3" /> Description
           </label>
           <textarea
             name="description"
             defaultValue={editingTask?.description}
             placeholder="Add notes, Zoom links, or details..."
-            className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-sm min-h-[80px]"
+            className="w-full p-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-sm min-h-20"
           />
         </div>
 

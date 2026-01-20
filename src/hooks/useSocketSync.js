@@ -27,7 +27,7 @@ export const useSocketSync = (
     localColorsRef.current = localClassColors;
   }, [localClassColors]);
 
-  // Helper to wrap socket emits in a Promise for proper async/await error handling
+  
   const emitAsync = (eventName, data, socketInstance = socket) => {
     return new Promise((resolve, reject) => {
       if (!socketInstance) return reject(new Error("No socket connection"));
@@ -42,7 +42,7 @@ export const useSocketSync = (
     });
   };
 
-  // 1. Connect to Socket & Fetch Initial Data
+  
   useEffect(() => {
     if (!roomId || !isAuthorized || !authToken || !cryptoKey) {
       if (socket) {
@@ -76,7 +76,7 @@ export const useSocketSync = (
         const rawEvents = Array.isArray(data.events) ? data.events : [];
         let serverMeta = data.meta || {};
 
-        // --- HANDLE EVENTS ---
+        
         if (rawEvents.length > 0) {
           console.log(`[Sync] Found ${rawEvents.length} events on server.`);
           const decryptedEvents = await Promise.all(
@@ -84,7 +84,7 @@ export const useSocketSync = (
           );
           setEvents(decryptedEvents);
         } else {
-          // Server empty? Check local to re-seed.
+          
           const currentLocal = localEventsRef.current;
           if (currentLocal && currentLocal.length > 0) {
             console.log(
@@ -93,7 +93,7 @@ export const useSocketSync = (
             const encryptedEvents = await Promise.all(
               currentLocal.map((e) => encryptEvent(e, cryptoKey)),
             );
-            // Use emitAsync just in case, though we don't catch errors here heavily
+            
             newSocket.emit("event:bulk_save", {
               roomId,
               events: encryptedEvents,
@@ -101,7 +101,7 @@ export const useSocketSync = (
           }
         }
 
-        // --- HANDLE COLORS ---
+        
         let serverColors = null;
         if (serverMeta && serverMeta.classColors) {
           serverColors =
@@ -136,7 +136,7 @@ export const useSocketSync = (
     };
   }, [roomId, isAuthorized, authToken, cryptoKey]);
 
-  // 2. Listen for Real-time Updates
+  
   useEffect(() => {
     if (!socket || !cryptoKey) return;
 
@@ -193,12 +193,12 @@ export const useSocketSync = (
     };
   }, [socket, cryptoKey, setEvents, setClassColors]);
 
-  // 3. Actions
+  
   const addEvent = useCallback(
     async (event) => {
       if (!socket || !cryptoKey) return;
 
-      // Optimistic Update
+      
       setEvents((prev) => [...prev, event]);
 
       try {
@@ -206,7 +206,7 @@ export const useSocketSync = (
         await emitAsync("event:save", { roomId, event: encrypted });
       } catch (err) {
         console.error("Sync failed:", err);
-        // Rollback
+        
         setEvents((prev) => prev.filter((e) => e.id !== event.id));
       }
     },
@@ -217,7 +217,7 @@ export const useSocketSync = (
     async (events) => {
       if (!socket || !cryptoKey || events.length === 0) return;
 
-      // Optimistic Update
+      
       setEvents((prev) => [...prev, ...events]);
 
       try {
@@ -227,7 +227,7 @@ export const useSocketSync = (
         await emitAsync("event:bulk_save", { roomId, events: encryptedEvents });
       } catch (err) {
         console.error("Bulk sync failed:", err);
-        // Rollback
+        
         const newIds = new Set(events.map((e) => e.id));
         setEvents((prev) => prev.filter((e) => !newIds.has(e.id)));
       }
@@ -239,7 +239,7 @@ export const useSocketSync = (
     async (event) => {
       if (!socket || !cryptoKey) return;
 
-      // Store previous state for rollback
+      
       let previousEvent = null;
       setEvents((prev) => {
         previousEvent = prev.find((e) => e.id === event.id);
@@ -251,7 +251,7 @@ export const useSocketSync = (
         await emitAsync("event:save", { roomId, event: encrypted });
       } catch (err) {
         console.error("Update failed:", err);
-        // Rollback
+        
         if (previousEvent) {
           setEvents((prev) =>
             prev.map((e) => (e.id === event.id ? previousEvent : e)),
@@ -266,7 +266,7 @@ export const useSocketSync = (
     async (eventId) => {
       if (!socket) return;
 
-      // Store previous event for rollback
+      
       let deletedEvent = null;
       setEvents((prev) => {
         deletedEvent = prev.find((e) => e.id === eventId);
@@ -277,7 +277,7 @@ export const useSocketSync = (
         await emitAsync("event:delete", { roomId, eventId });
       } catch (err) {
         console.error("Delete failed:", err);
-        // Rollback
+        
         if (deletedEvent) {
           setEvents((prev) => [...prev, deletedEvent]);
         }
@@ -298,16 +298,16 @@ export const useSocketSync = (
     [socket, roomId],
   );
 
-  // NEW: Helper to clear all events on server
+  
   const clearAllEvents = useCallback(async () => {
     if (!socket) return;
-    setEvents([]); // Optimistic clear
+    setEvents([]); 
 
     try {
       const eventsToDelete = localEventsRef.current || [];
       const eventIds = eventsToDelete.map((e) => e.id);
 
-      // NOW: Single network request instead of 500
+      
       await emitAsync("event:bulk_delete", { roomId, eventIds });
     } catch (err) {
       console.error("Clear all failed:", err);

@@ -1,4 +1,4 @@
-import ICAL from "ical.js"; // Requires npm install ical.js
+import ICAL from "ical.js"; 
 import { determineClass, determineType } from "./helpers";
 
 export const processICSContent = (
@@ -10,7 +10,7 @@ export const processICSContent = (
   setEvents,
 ) => {
   try {
-    // 1. Parse using Library
+    
     const jcalData = ICAL.parse(text);
     const vcalendar = new ICAL.Component(jcalData);
     const vevents = vcalendar.getAllSubcomponents("vevent");
@@ -26,7 +26,7 @@ export const processICSContent = (
       const location = event.location || "";
       const startDate = event.startDate;
 
-      // Skip if no date
+      
       if (!startDate) return;
 
       const type = determineType(summary, description);
@@ -35,11 +35,11 @@ export const processICSContent = (
       if (className) foundClasses.add(className);
 
       newEvents.push({
-        id: crypto.randomUUID(), // Secure ID
+        id: crypto.randomUUID(), 
         title: summary,
         description: description,
         location: location,
-        // Convert ICAL date to YYYY-MM-DD
+        
         date: startDate.toJSDate().toISOString().split("T")[0],
         time: startDate.isDate
           ? null
@@ -50,7 +50,7 @@ export const processICSContent = (
       });
     });
 
-    // Color Logic (Same as before)
+    
     let finalColors = { ...currentClassColors };
     const defaultPalette = [
       "#3b82f6",

@@ -12,14 +12,14 @@ import {
 } from "lucide-react";
 import { useUI, UIProvider } from "./context/PlannerContext";
 import { useData, DataProvider } from "./context/DataContext";
-import { AuthProvider, useAuth } from "./context/AuthContext"; // Ensure useAuth is exported
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import SetupScreen from "./components/setup/SetupScreen";
 import Sidebar from "./components/planner/Sidebar";
 import CalendarView from "./components/planner/CalendarView";
 import SettingsModal from "./components/modals/SettingsModal";
 import TaskModal from "./components/modals/TaskModal";
 import ConfirmationModal from "./components/modals/ConfirmationModal";
-import ReLoginModal from "./components/modals/ReLoginModal"; // New Import
+import ReLoginModal from "./components/modals/ReLoginModal"
 
 function PlannerApp() {
   const {
@@ -38,7 +38,7 @@ function PlannerApp() {
     importJsonData,
   } = useData();
 
-  const { roomId, isAuthorized, roomPassword } = useAuth(); // Get Auth State
+  const { roomId, isAuthorized, roomPassword } = useAuth(); 
 
   const {
     darkMode,
@@ -65,11 +65,11 @@ function PlannerApp() {
     openTaskModal,
   } = useUI();
 
-  // New State for Re-Login Logic
+  
   const [isReloginOpen, setIsReloginOpen] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
 
-  // Trigger Re-Login Modal if Room ID exists but no password (and not explicitly offline)
+ 
   useEffect(() => {
     if (roomId && !roomPassword && !offlineMode) {
       setIsReloginOpen(true);

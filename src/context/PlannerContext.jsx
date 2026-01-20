@@ -5,7 +5,7 @@ const UIContext = createContext();
 
 export const useUI = () => useContext(UIContext);
 
-// Load State Helper
+
 const loadState = (key, fallback) => {
   try {
     const item = localStorage.getItem(key);
@@ -35,17 +35,17 @@ export const UIProvider = ({ children }) => {
   });
   const [editingTask, setEditingTask] = useState(null);
 
-  // Initial View Logic
+  
   useEffect(() => {
     const savedEvents = loadState(STORAGE_KEYS.EVENTS, []);
-    const savedRoom = loadState("planner_curr_room_id", null); // Legacy check
-    // If we have data, go to planner view
+    const savedRoom = loadState("planner_curr_room_id", null); 
+    
     if ((savedEvents && savedEvents.length > 0) || savedRoom) {
       setView("planner");
     }
   }, []);
 
-  // Persistence
+  
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.CAL_MODE, JSON.stringify(calendarView));
   }, [calendarView]);

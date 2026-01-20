@@ -10,7 +10,7 @@ export const useRoomAuth = (roomId, roomPassword) => {
   const [isNewRoom, setIsNewRoom] = useState(false);
 
   useEffect(() => {
-    // Reset state if inputs are invalid or changed
+    
     if (!roomId) {
       setIsAuthorized(false);
       setAuthToken(null);
@@ -20,9 +20,9 @@ export const useRoomAuth = (roomId, roomPassword) => {
       return;
     }
 
-    // Only attempt auth if we have both ID and Password
+    
     if (!roomPassword) {
-      // Just waiting for password, reset auth state
+      
       setIsAuthorized(false);
       return;
     }
@@ -32,7 +32,7 @@ export const useRoomAuth = (roomId, roomPassword) => {
     const authenticate = async () => {
       setAuthError(null);
       try {
-        // 1. Init: Get Salt
+        
         const initRes = await fetch(`${API_BASE_URL}/api/auth/init`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -44,13 +44,13 @@ export const useRoomAuth = (roomId, roomPassword) => {
 
         if (mounted) setIsNewRoom(isNew);
 
-        // 2. Derive Keys
-        // Key 1: For Authentication (String)
+        
+        
         const authHash = await deriveKey(roomPassword, salt, "AUTH");
-        // Key 2: For Data Encryption (CryptoKey Object) - KEEP PRIVATE
+        
         const dataKey = await deriveKey(roomPassword, salt, "DATA");
 
-        // 3. Login / Register
+        
         const authRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -77,7 +77,7 @@ export const useRoomAuth = (roomId, roomPassword) => {
       }
     };
 
-    // Debounce slightly to avoid rapid requests while typing
+    
     const timer = setTimeout(() => {
       authenticate();
     }, 500);

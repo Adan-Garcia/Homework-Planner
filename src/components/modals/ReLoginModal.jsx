@@ -11,8 +11,6 @@ const ReLoginModal = ({ isOpen, onClose, onOffline }) => {
     e.preventDefault();
     if (password.trim()) {
       setRoomPassword(password);
-      // The modal remains open until 'isAuthorized' changes in App.jsx,
-      // or we can show a loading state here if we passed it down.
     }
   };
 
