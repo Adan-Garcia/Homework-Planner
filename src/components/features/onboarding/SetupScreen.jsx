@@ -12,10 +12,10 @@ import {
   Users,
   Lock,
 } from "lucide-react";
-import Modal from "../ui/Modal";
-import { useUI } from "../../context/PlannerContext";
-import { useData } from "../../context/DataContext";
-import { useAuth } from "../../context/AuthContext"; 
+import Modal from "../../ui/Modal";
+import { useUI } from "../../../context/PlannerContext";
+import { useData } from "../../../context/DataContext";
+import { useAuth } from "../../../context/AuthContext"; 
 
 const SetupScreen = () => {
   const {

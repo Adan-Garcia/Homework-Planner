@@ -6,7 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 import SettingsModal from "../modals/SettingsModal";
 import TaskModal from "../modals/TaskModal";
 import ConfirmationModal from "../modals/ConfirmationModal";
-import ReLoginModal from "../modals/ReLoginModal";
+import ReLoginModal from "../features/auth/ReLoginModal";
 
 const ModalManager = () => {
   const { modals, closeModal, openModal, editingTask } = useUI();

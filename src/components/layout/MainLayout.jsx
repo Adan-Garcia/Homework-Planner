@@ -11,6 +11,7 @@ import {
   AlignLeft,
 } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
+import Button from "../ui/Button"; // Importing your new Atom
 
 const MainLayout = ({ children }) => {
   const {
@@ -45,49 +46,52 @@ const MainLayout = ({ children }) => {
         {/* View Switcher */}
         <div className="flex items-center surface-card rounded-lg p-1">
           {viewOptions.map((v) => (
-            <button
+            <Button
               key={v.id}
               onClick={() => setCalendarView(v.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                calendarView === v.id
-                  ? "surface-main shadow-sm text-link"
-                  : "text-secondary hover:text-primary"
-              }`}
+              variant="ghost" // Using ghost to strip default colors
+              className={`
+                !px-3 !py-1.5 gap-2 transition-all
+                ${
+                  calendarView === v.id
+                    ? "surface-main shadow-sm text-link"
+                    : "text-secondary hover:text-primary"
+                }
+              `}
             >
               <v.icon className="icon-sm" />
               <span className="hidden sm:inline">{v.label}</span>
-            </button>
+            </Button>
           ))}
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="primary"
             onClick={() => openTaskModal(null)}
-            className="btn-base btn-primary"
+            icon={Plus}
           >
-            <Plus className="icon-sm" /> New
-          </button>
+            New
+          </Button>
           
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setDarkMode(!darkMode)}
-            className="p-2 rounded-lg text-secondary surface-card-hover"
+            className="p-2 text-secondary hover:bg-slate-100 dark:hover:bg-slate-700"
           >
-            {darkMode ? (
-              <Sun className="icon-sm" />
-            ) : (
-              <Moon className="icon-sm" />
-            )}
-          </button>
+             {darkMode ? <Sun className="icon-sm" /> : <Moon className="icon-sm" />}
+          </Button>
           
           <div className="w-px h-5 border-l border-divider mx-2"></div>
           
-          <button
+          <Button
+            variant="ghost"
             onClick={() => openModal("settings")}
-            className="p-2 rounded-lg text-secondary surface-card-hover"
+            className="p-2 text-secondary hover:bg-slate-100 dark:hover:bg-slate-700"
           >
             <Settings className="icon-sm" />
-          </button>
+          </Button>
         </div>
       </header>
 

@@ -3,9 +3,9 @@ import { useUI, UIProvider } from "./context/PlannerContext";
 import { useData, DataProvider } from "./context/DataContext";
 import { AuthProvider } from "./context/AuthContext";
 
-import SetupScreen from "./components/setup/SetupScreen";
-import Sidebar from "./components/planner/Sidebar";
-import CalendarView from "./components/planner/CalendarView";
+import SetupScreen from "./components/features/onboarding/SetupScreen";
+import Sidebar from "./components/features/calendar/Sidebar";
+import CalendarView from "./components/features/calendar/CalendarView";
 
 import MainLayout from "./components/layout/MainLayout";
 import ModalManager from "./components/managers/ModalManager";

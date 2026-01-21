@@ -1,6 +1,9 @@
 import React, { useMemo } from "react";
 import { Check, Clock, Calendar, AlertCircle, GripVertical } from "lucide-react";
 import { format, isToday, isTomorrow, isPast, isSameDay, parseISO } from "date-fns";
+import Card from "../../ui/Card";
+import Button from "../../ui/Button";
+import Input from "../../ui/Input";
 
 const Sidebar = ({
   // Data
@@ -26,7 +29,7 @@ const Sidebar = ({
   handleSidebarDrop,
 }) => {
   
-  // --- Grouping Logic ---
+  // --- Grouping Logic (Preserved) ---
   const groupedTasks = useMemo(() => {
     const groups = {
       overdue: [],
@@ -34,15 +37,11 @@ const Sidebar = ({
       tomorrow: [],
       upcoming: [],
     };
-
     const today = new Date();
-
     filteredEvents.forEach((task) => {
       if (!task.date) return;
       const taskDate = parseISO(task.date);
-
       if (task.completed && !showCompleted) return;
-
       if (!task.completed && isPast(taskDate) && !isToday(taskDate)) {
         groups.overdue.push(task);
       } else if (isToday(taskDate)) {
@@ -53,27 +52,27 @@ const Sidebar = ({
         groups.upcoming.push(task);
       }
     });
-
     return groups;
   }, [filteredEvents, showCompleted]);
 
   // --- Render Helpers ---
   const TaskItem = ({ task }) => (
-    <div
+    <Card
+      hoverable={!task.completed}
       draggable={!task.completed}
       onDragStart={(e) => handleDragStart(e, task.id)}
       onClick={() => openEditTaskModal(task)}
       className={`
-        group relative flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer
+        relative flex items-start gap-3 p-3 transition-all cursor-pointer group
         ${
           task.completed
             ? "bg-slate-50 border-transparent opacity-60"
-            : "surface-card border-base hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm"
+            : "hover:border-blue-300 dark:hover:border-blue-700"
         }
         ${draggedEventId === task.id ? "opacity-40 ring-2 ring-blue-400" : ""}
       `}
     >
-      {/* Checkbox */}
+      {/* Checkbox: Kept as standard button for specific micro-interaction sizing */}
       <button
         onClick={(e) => toggleTask(e, task.id)}
         className={`
@@ -130,7 +129,7 @@ const Sidebar = ({
           <GripVertical className="w-4 h-4" />
         </div>
       )}
-    </div>
+    </Card>
   );
 
   const DropZone = ({ title, groupKey, icon: Icon, items, isDanger }) => (
@@ -166,15 +165,15 @@ const Sidebar = ({
     <aside className="w-80 border-r border-divider bg-white dark:bg-slate-900 flex flex-col h-full shrink-0">
       {/* Search & Filter Header */}
       <div className="p-4 border-b border-divider space-y-3">
-        <input
-          type="text"
+        <Input
           placeholder="Search tasks..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border-none text-sm text-primary focus:ring-2 focus:ring-blue-500/20 outline-none placeholder:text-slate-400"
+          className="bg-slate-50 dark:bg-slate-800 border-none"
         />
         
         <div className="flex gap-2">
+          {/* Native Select (Simple enough to keep native for now) */}
           <select
             value={activeTypeFilter}
             onChange={(e) => setActiveTypeFilter(e.target.value)}
@@ -186,34 +185,35 @@ const Sidebar = ({
             <option value="Project">Project</option>
           </select>
 
-          <button
+          <Button
             onClick={() => setShowCompleted(!showCompleted)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-              showCompleted
-                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                : "bg-slate-50 text-slate-500 dark:bg-slate-800 hover:bg-slate-100"
-            }`}
+            variant={showCompleted ? "ghost" : "secondary"}
+            className={`
+              !px-3 !py-1.5 
+              ${showCompleted 
+                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+                : "text-slate-500"
+              }
+            `}
           >
             Done
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Task List */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
         
-        {/* Overdue */}
         {(!hideOverdue && groupedTasks.overdue.length > 0) && (
           <DropZone 
             title="Overdue" 
-            groupKey="overdue" // Logic usually prevents dropping here, but visual is fine
+            groupKey="overdue"
             icon={AlertCircle} 
             items={groupedTasks.overdue} 
             isDanger 
           />
         )}
 
-        {/* Today */}
         <DropZone 
           title="Today" 
           groupKey="today" 
@@ -221,7 +221,6 @@ const Sidebar = ({
           items={groupedTasks.today} 
         />
 
-        {/* Tomorrow */}
         <DropZone 
           title="Tomorrow" 
           groupKey="tomorrow" 
@@ -229,7 +228,6 @@ const Sidebar = ({
           items={groupedTasks.tomorrow} 
         />
 
-        {/* Upcoming */}
         <div className="flex flex-col gap-2">
            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-secondary px-1">
               <Calendar className="w-4 h-4" />
