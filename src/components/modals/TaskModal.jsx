@@ -1,185 +1,197 @@
-import React, { useState } from "react";
-import {
-  Calendar,
-  Clock,
-  Type,
-  AlertCircle,
-  Repeat,
-  AlignLeft,
-  BookOpen,
-} from "lucide-react";
-import { EVENT_TYPES } from "../../utils/constants";
+import React, { useState, useEffect } from "react";
+import { Trash2, Save } from "lucide-react";
+import { useUI } from "../../context/PlannerContext"; // Fixed Import
+import { useData } from "../../context/DataContext";    // Fixed Import
+import Modal from "../ui/Modal";
+import Input from "../ui/Input";
+import Button from "../ui/Button";
 
-const TaskForm = ({ editingTask, classColors, onSubmit, id }) => {
-  const [isRecurring, setIsRecurring] = useState(
-    !!editingTask?.recurrence
+const TaskModal = () => {
+  // 1. UI Context: Handles the Modal visibility and the "Editing" state
+  const { 
+    modals, 
+    closeModal, 
+    editingTask 
+  } = useUI();
+
+  // 2. Data Context: Handles the database operations
+  const { 
+    addEvent, 
+    updateEvent, 
+    deleteEvent, 
+    classColors 
+  } = useData();
+
+  // Helper: Get classes from the keys of the colors object
+  const classes = Object.keys(classColors);
+  const isOpen = modals.task;
+
+  const [formData, setFormData] = useState({
+    title: "",
+    class: "",
+    type: "Homework",
+    date: "",
+    time: "",
+    priority: "Normal",
+    description: "",
+  });
+
+  // Load data when editing
+  useEffect(() => {
+    if (editingTask) {
+      setFormData(editingTask);
+    } else {
+      // Default to "Tomorrow" if creating new
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      setFormData({
+        title: "",
+        class: classes[0] || "",
+        type: "Homework",
+        date: tomorrow.toISOString().split("T")[0],
+        time: "",
+        priority: "Normal",
+        description: "",
+      });
+    }
+  }, [editingTask, isOpen]); // removed 'classes' dependency to prevent loop reset
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (editingTask) {
+      // Ensure we keep the original ID when updating
+      updateEvent({ ...editingTask, ...formData });
+    } else {
+      addEvent(formData);
+    }
+    closeModal("task");
+  };
+
+  const handleDelete = () => {
+    if (editingTask && confirm("Are you sure you want to delete this task?")) {
+      deleteEvent(editingTask.id);
+      closeModal("task");
+    }
+  };
+
+  // Footer Actions
+  const footer = (
+    <>
+      {editingTask && (
+        <Button 
+          variant="danger" 
+          onClick={handleDelete} 
+          className="mr-auto" // Pushes delete button to the left
+          icon={Trash2}
+        >
+          Delete
+        </Button>
+      )}
+      <Button variant="ghost" onClick={() => closeModal("task")}>
+        Cancel
+      </Button>
+      <Button variant="primary" onClick={handleSubmit} icon={Save}>
+        {editingTask ? "Save Changes" : "Create Task"}
+      </Button>
+    </>
   );
 
-  // Helper for input classes
-  const inputGroupClass = "space-y-1.5";
-  const labelClass = "text-[10px] font-bold uppercase tracking-wider text-secondary flex items-center gap-1.5";
-  const inputClass = "w-full p-2.5 rounded-lg border-input surface-input text-input text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none";
-  const selectClass = `${inputClass} appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2364748b%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:12px_12px] bg-[right_1rem_center] bg-no-repeat pr-8`;
-
   return (
-    <form id={id} onSubmit={onSubmit} className="space-y-5">
-      {/* Title Input */}
-      <div className={inputGroupClass}>
-        <label className={labelClass}>Task Title</label>
-        <input
-          name="title"
-          defaultValue={editingTask?.title || ""}
-          placeholder="e.g., Calculus Midterm"
-          className={inputClass}
+    <Modal
+      isOpen={isOpen}
+      onClose={() => closeModal("task")}
+      title={editingTask ? "Edit Task" : "New Task"}
+      footer={footer}
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Title */}
+        <Input
+          label="Task Title"
+          value={formData.title}
+          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+          placeholder="e.g. Calculus Chapter 4"
           required
           autoFocus
         />
-      </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Class Selection */}
-        <div className={inputGroupClass}>
-          <label className={labelClass}>
-            <BookOpen className="w-3 h-3" /> Class
-          </label>
-          <select
-            name="class"
-            defaultValue={editingTask?.class || ""}
-            className={selectClass}
-            required
-          >
-            <option value="" disabled>Select Class</option>
-            {Object.keys(classColors).map((cls) => (
-              <option key={cls} value={cls}>{cls}</option>
-            ))}
-          </select>
+        {/* Grid for Class & Type */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Class</label>
+            <select
+              value={formData.class}
+              onChange={(e) => setFormData({ ...formData, class: e.target.value })}
+              className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              {classes.length > 0 ? (
+                classes.map((c) => <option key={c} value={c}>{c}</option>)
+              ) : (
+                <option value="">No Classes Defined</option>
+              )}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Type</label>
+            <select
+              value={formData.type}
+              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+              className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+              <option value="Homework">Homework</option>
+              <option value="Exam">Exam</option>
+              <option value="Project">Project</option>
+              <option value="Quiz">Quiz</option>
+            </select>
+          </div>
         </div>
 
-        {/* Type Selection */}
-        <div className={inputGroupClass}>
-          <label className={labelClass}>
-            <Type className="w-3 h-3" /> Type
-          </label>
-          <select
-            name="type"
-            defaultValue={editingTask?.type || "Homework"}
-            className={selectClass}
-          >
-            {EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {/* Date Input */}
-        <div className={inputGroupClass}>
-          <label className={labelClass}>
-            <Calendar className="w-3 h-3" /> Due Date
-          </label>
-          <input
+        {/* Grid for Date, Time, Priority */}
+        <div className="grid grid-cols-3 gap-4">
+          <Input
+            label="Date"
             type="date"
-            name="date"
-            defaultValue={editingTask?.date || new Date().toISOString().split("T")[0]}
-            className={inputClass}
+            value={formData.date}
+            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
           />
-        </div>
-
-        {/* Time Input */}
-        <div className={inputGroupClass}>
-          <label className={labelClass}>
-            <Clock className="w-3 h-3" /> Time
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="time"
-              name="time"
-              defaultValue={editingTask?.time || ""}
-              className={`${inputClass} disabled:opacity-50`}
-            />
+          <Input
+            label="Time (Optional)"
+            type="time"
+            value={formData.time}
+            onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+          />
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Priority</label>
+            <select
+              value={formData.priority}
+              onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+              className={`w-full p-2.5 rounded-lg border-input surface-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                formData.priority === "High" ? "text-red-500 font-bold" : "text-input"
+              }`}
+            >
+              <option value="Low">Low</option>
+              <option value="Normal">Normal</option>
+              <option value="High">High</option>
+            </select>
           </div>
         </div>
-      </div>
 
-      {/* Priority & Recurrence Toggles */}
-      <div className="p-3 rounded-lg border-base surface-card flex items-center justify-between">
-        <div className="flex items-center gap-4">
-           {/* Priority Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer group">
-            <input
-              type="checkbox"
-              name="priority"
-              value="High"
-              defaultChecked={editingTask?.priority === "High"}
-              className="w-4 h-4 rounded border-input text-blue-600 focus:ring-blue-500/20"
-            />
-            <span className="text-xs font-medium text-primary group-hover:text-blue-600 transition-colors flex items-center gap-1">
-              <AlertCircle className="w-3.5 h-3.5" /> High Priority
-            </span>
-          </label>
-
-          {/* Recurrence Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={isRecurring}
-              onChange={(e) => setIsRecurring(e.target.checked)}
-              className="w-4 h-4 rounded border-input text-blue-600 focus:ring-blue-500/20"
-            />
-            <span className="text-xs font-medium text-primary group-hover:text-blue-600 transition-colors flex items-center gap-1">
-              <Repeat className="w-3.5 h-3.5" /> Repeat
-            </span>
-          </label>
+        {/* Description */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Description</label>
+          <textarea
+            rows={3}
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none resize-none"
+            placeholder="Add details, links, or notes..."
+          />
         </div>
-      </div>
-
-      {/* Recurrence Options (Conditional) */}
-      {isRecurring && (
-        <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 space-y-3 animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 text-xs font-bold uppercase tracking-wider">
-            <Repeat className="w-3 h-3" /> Recurrence Settings
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-             <div className="space-y-1">
-               <label className="text-[10px] text-secondary">Frequency</label>
-               <select name="recurrenceRule" className={selectClass}>
-                 <option value="weekly">Weekly</option>
-                 <option value="biweekly">Bi-Weekly</option>
-                 <option value="monthly">Monthly</option>
-               </select>
-             </div>
-             <div className="space-y-1">
-               <label className="text-[10px] text-secondary">Duration (Weeks)</label>
-               <input 
-                 type="number" 
-                 name="recurrenceWeeks" 
-                 defaultValue="1" 
-                 min="1" 
-                 max="52" 
-                 className={inputClass} 
-               />
-             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Description */}
-      <div className={inputGroupClass}>
-        <label className={labelClass}>
-          <AlignLeft className="w-3 h-3" /> Description
-        </label>
-        <textarea
-          name="description"
-          defaultValue={editingTask?.description || ""}
-          rows="3"
-          className={`${inputClass} resize-none`}
-          placeholder="Add details, links, or notes..."
-        />
-      </div>
-    </form>
+      </form>
+    </Modal>
   );
 };
 
-export default TaskForm;
+export default TaskModal;
