@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useData } from "../context/DataContext";
 import { useUI } from "../context/PlannerContext";
+import { compareTasks } from "../utils/helpers";
 
 export const useFilteredEvents = () => {
   const { events, hiddenClasses } = useData();
@@ -11,7 +12,7 @@ export const useFilteredEvents = () => {
     cutoffDate.setMonth(cutoffDate.getMonth() - 1);
     cutoffDate.setHours(0, 0, 0, 0);
 
-    return events.filter((e) => {
+    const filtered = events.filter((e) => {
       // 1. Class Filter
       if (hiddenClasses.includes(e.class)) return false;
 
@@ -36,5 +37,9 @@ export const useFilteredEvents = () => {
 
       return true;
     });
+
+    // Apply Sorting: Time > Priority > Alpha
+    return filtered.sort(compareTasks);
+    
   }, [events, hiddenClasses, activeTypeFilter, showCompleted, searchQuery]);
 };

@@ -5,7 +5,6 @@ const UIContext = createContext();
 
 export const useUI = () => useContext(UIContext);
 
-
 const loadState = (key, fallback) => {
   try {
     const item = localStorage.getItem(key);
@@ -34,8 +33,10 @@ export const UIProvider = ({ children }) => {
     jsonEdit: false,
   });
   const [editingTask, setEditingTask] = useState(null);
-
   
+  // --- NEW: Mobile Sidebar State ---
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   useEffect(() => {
     const savedEvents = loadState(STORAGE_KEYS.EVENTS, []);
     const savedRoom = loadState("planner_curr_room_id", null); 
@@ -45,7 +46,6 @@ export const UIProvider = ({ children }) => {
     }
   }, []);
 
-  
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.CAL_MODE, JSON.stringify(calendarView));
   }, [calendarView]);
@@ -90,6 +90,9 @@ export const UIProvider = ({ children }) => {
         editingTask,
         setEditingTask,
         openTaskModal,
+        // Export new state
+        mobileMenuOpen,
+        setMobileMenuOpen,
       }}
     >
       {children}

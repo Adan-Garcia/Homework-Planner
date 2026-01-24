@@ -1,9 +1,12 @@
+// adan-garcia/homework-planner/Homework-Planner-UI-Refactor/src/components/features/calendar/Sidebar.jsx
+
 import React, { useMemo } from "react";
 import { Check, Clock, Calendar, AlertCircle, GripVertical } from "lucide-react";
-import { format, isToday, isTomorrow, isPast, isSameDay, parseISO } from "date-fns";
+import { format, isToday, isTomorrow, isPast, parseISO } from "date-fns";
 import Card from "../../ui/Card";
-import Button from "../../ui/Button";
 import Input from "../../ui/Input";
+import Button from "../../ui/Button"; // Ensure this is imported if used
+import { useUI } from "../../../context/PlannerContext"; // Import Context
 
 const Sidebar = ({
   // Data
@@ -20,7 +23,7 @@ const Sidebar = ({
   showCompleted,
   setShowCompleted,
   hideOverdue,
-  setHideOverdue,
+  setHideOverdue, // Make sure this is passed from App.jsx if used
 
   // Drag & Drop
   draggedEventId,
@@ -29,7 +32,9 @@ const Sidebar = ({
   handleSidebarDrop,
 }) => {
   
-  // --- Grouping Logic (Preserved) ---
+  const { mobileMenuOpen } = useUI(); // Consume context
+
+  // --- Grouping Logic ---
   const groupedTasks = useMemo(() => {
     const groups = {
       overdue: [],
@@ -37,7 +42,6 @@ const Sidebar = ({
       tomorrow: [],
       upcoming: [],
     };
-    const today = new Date();
     filteredEvents.forEach((task) => {
       if (!task.date) return;
       const taskDate = parseISO(task.date);
@@ -72,7 +76,6 @@ const Sidebar = ({
         ${draggedEventId === task.id ? "opacity-40 ring-2 ring-blue-400" : ""}
       `}
     >
-      {/* Checkbox: Kept as standard button for specific micro-interaction sizing */}
       <button
         onClick={(e) => toggleTask(e, task.id)}
         className={`
@@ -87,7 +90,6 @@ const Sidebar = ({
         {task.completed && <Check className="w-3.5 h-3.5" />}
       </button>
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span
@@ -122,10 +124,9 @@ const Sidebar = ({
            )}
         </div>
       </div>
-
-      {/* Drag Handle */}
+      
       {!task.completed && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-400 cursor-grab active:cursor-grabbing">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-400 cursor-grab active:cursor-grabbing md:block hidden">
           <GripVertical className="w-4 h-4" />
         </div>
       )}
@@ -162,7 +163,22 @@ const Sidebar = ({
   );
 
   return (
-    <aside className="w-80 border-r border-divider bg-white dark:bg-slate-900 flex flex-col h-full shrink-0">
+    <aside 
+      className={`
+        border-r border-divider bg-white dark:bg-slate-900 flex flex-col h-full shrink-0
+        transition-all duration-300 ease-in-out
+        
+        /* Mobile Styles */
+        absolute inset-0 z-20 w-full
+        ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+        
+        /* Desktop Styles */
+        md:relative md:translate-x-0 md:w-80 md:block
+        
+        /* Ensure it hides properly when closed on mobile */
+        ${!mobileMenuOpen ? "hidden md:flex" : "flex"}
+      `}
+    >
       {/* Search & Filter Header */}
       <div className="p-4 border-b border-divider space-y-3">
         <Input
@@ -173,7 +189,6 @@ const Sidebar = ({
         />
         
         <div className="flex gap-2">
-          {/* Native Select (Simple enough to keep native for now) */}
           <select
             value={activeTypeFilter}
             onChange={(e) => setActiveTypeFilter(e.target.value)}

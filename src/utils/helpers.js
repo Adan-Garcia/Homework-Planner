@@ -113,7 +113,6 @@ export const formatTime = (timeStr) => {
 };
 
 export const addDaysToDate = (dateStr, days) => {
-  
   const date = new Date(dateStr + "T00:00:00");
   const newDate = addDays(date, days);
   return format(newDate, "yyyy-MM-dd");
@@ -196,3 +195,29 @@ export const getContrastColor = (hexcolor) => {
   const yiq = (r * 299 + g * 587 + b * 114) / 1000;
   return yiq >= 128 ? "#000000" : "#ffffff";
 };
+
+// --- NEW HELPERS ---
+
+// Task Sorting: Time -> Priority -> Alphabetical
+export const compareTasks = (a, b) => {
+  // 1. Date (if filtering a mixed list)
+  if (a.date !== b.date) return a.date.localeCompare(b.date);
+
+  // 2. Time: specific times first, no-time (all day) last (or vice versa depending on preference).
+  // Standard planner: No time (all day) -> Specific Time
+  if (a.time && !b.time) return 1; 
+  if (!a.time && b.time) return -1;
+  if (a.time && b.time && a.time !== b.time) return a.time.localeCompare(b.time);
+
+  // 3. Priority: High > Normal > Low
+  const pWeight = { High: 3, Normal: 2, Low: 1 };
+  const pA = pWeight[a.priority] || 2;
+  const pB = pWeight[b.priority] || 2;
+  if (pA !== pB) return pB - pA; // Descending
+
+  // 4. Alphabetical
+  return a.title.localeCompare(b.title);
+};
+
+// URL Detection Regex
+export const urlRegex = /(https?:\/\/[^\s]+)/g;
