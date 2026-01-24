@@ -7,11 +7,13 @@ import SettingsModal from "../modals/SettingsModal";
 import TaskModal from "../modals/TaskModal";
 import ConfirmationModal from "../modals/ConfirmationModal";
 import ReLoginModal from "../features/auth/ReLoginModal";
+import JsonEditorModal from "../features/settings/JsonEditorModal";
 
 const ModalManager = () => {
   const { modals, closeModal, openModal, editingTask } = useUI();
   
   const {
+    events,
     classColors,
     setClassColors,
     deleteClass,
@@ -19,23 +21,18 @@ const ModalManager = () => {
     resetAllData,
     exportICS,
     importJsonData,
-    addEvent,
-    updateEvent,
-    deleteEvent,
+    deleteEvent, 
+    refreshClassColors, // Get the function
   } = useData();
 
   const { roomId, roomPassword } = useAuth();
-
-  // --- Local State for Modal Operations ---
+  
+  // State ...
   const [mergeSource, setMergeSource] = useState("");
   const [mergeTarget, setMergeTarget] = useState("");
   const [jsonEditText, setJsonEditText] = useState("");
-  
-  // Auth State
   const [offlineMode, setOfflineMode] = useState(false);
   const [isReloginOpen, setIsReloginOpen] = useState(false);
-
-  // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: "",
@@ -44,9 +41,7 @@ const ModalManager = () => {
     isDanger: false,
   });
 
-  // --- Effects ---
-  
-  // Handle ReLogin Visibility
+  // Effects & Handlers ...
   useEffect(() => {
     if (roomId && !roomPassword && !offlineMode) {
       setIsReloginOpen(true);
@@ -55,58 +50,42 @@ const ModalManager = () => {
     }
   }, [roomId, roomPassword, offlineMode]);
 
-  // --- Handlers ---
+  const handleOpenJsonEditor = () => {
+    setJsonEditText(JSON.stringify(events, null, 2));
+    openModal("jsonEdit");
+  };
 
   const handleJsonSave = () => {
-    if (importJsonData(jsonEditText).success) {
+    const result = importJsonData(jsonEditText, false); 
+    if (result.success) {
       closeModal("jsonEdit");
-    }
-  };
-
-  const handleTaskSave = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const isAllDay = formData.get("isAllDay") === "on";
-    
-    const baseTask = {
-      title: formData.get("title"),
-      time: isAllDay ? "" : formData.get("time"),
-      class: formData.get("class"),
-      type: formData.get("type"),
-      priority: formData.get("priority") || "Medium",
-      description: formData.get("description") || "",
-      completed: editingTask ? editingTask.completed : false,
-    };
-    
-    const startDate = formData.get("date");
-    
-    if (editingTask) {
-      updateEvent({
-        ...baseTask,
-        date: startDate,
-        id: editingTask.id,
-        groupId: editingTask.groupId,
-      });
     } else {
-      addEvent({
-        ...baseTask,
-        date: startDate,
-        id: `manual-${Date.now()}`,
-        groupId: null,
-      });
+      alert(`Invalid JSON: ${result.error}`);
     }
-    closeModal("task");
   };
 
-  const requestDeleteTask = (id) => {
-    setConfirmModal({
+  const handleDeleteTaskConfirm = (deleteAction) => {
+     setConfirmModal({
       isOpen: true,
       title: "Delete Task?",
       message: "Are you sure you want to delete this task? This cannot be undone.",
       isDanger: true,
       onConfirm: () => {
-        deleteEvent(id);
+        deleteAction();
         closeModal("task");
+      },
+    });
+  };
+
+  const requestResetData = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Reset All Data?",
+      message: "This will permanently delete all tasks, classes, and settings from your device. If you are synced to a room, you might clear data for others too.",
+      isDanger: true,
+      onConfirm: () => {
+        resetAllData();
+        closeModal("settings");
       },
     });
   };
@@ -114,13 +93,13 @@ const ModalManager = () => {
   return (
     <>
       <SettingsModal
-        isOpen={modals.settings || modals.jsonEdit}
-        onClose={() => {
-          closeModal("settings");
-          closeModal("jsonEdit");
-        }}
+        isOpen={modals.settings}
+        onClose={() => closeModal("settings")}
+        
         classColors={classColors}
         setClassColors={setClassColors}
+        deleteClass={deleteClass}
+        
         mergeSource={mergeSource}
         setMergeSource={setMergeSource}
         mergeTarget={mergeTarget}
@@ -130,25 +109,23 @@ const ModalManager = () => {
           setMergeSource("");
           setMergeTarget("");
         }}
-        deleteClass={deleteClass}
-        resetAllData={resetAllData}
-        showJsonEdit={modals.jsonEdit}
-        setShowJsonEdit={(val) =>
-          val ? openModal("jsonEdit") : closeModal("jsonEdit")
-        }
-        jsonEditText={jsonEditText}
-        setJsonEditText={setJsonEditText}
-        handleJsonSave={handleJsonSave}
+
+        resetAllData={requestResetData}
         handleICSExport={exportICS}
+        onOpenJsonEditor={handleOpenJsonEditor}
+        onRefreshColors={refreshClassColors} // Pass it here
+      />
+
+      <JsonEditorModal 
+        isOpen={modals.jsonEdit}
+        onClose={() => closeModal("jsonEdit")}
+        text={jsonEditText}
+        setText={setJsonEditText}
+        onSave={handleJsonSave}
       />
 
       <TaskModal
-        isOpen={modals.task}
-        onClose={() => closeModal("task")}
-        editingTask={editingTask}
-        saveTask={handleTaskSave}
-        requestDelete={requestDeleteTask}
-        classColors={classColors}
+        requestDelete={handleDeleteTaskConfirm} 
       />
 
       <ConfirmationModal

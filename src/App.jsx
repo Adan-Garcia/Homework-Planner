@@ -15,7 +15,7 @@ import { useFilteredEvents } from "./hooks/useFilteredEvents";
 
 function PlannerApp() {
   const { view, openTaskModal } = useUI();
-  const { toggleTaskCompletion, classColors } = useData(); // Needed for Sidebar props
+  const { toggleTaskCompletion, classColors } = useData(); 
   
   // Custom Hooks to separate logic
   const filteredEvents = useFilteredEvents();
@@ -88,8 +88,11 @@ function PlannerApp() {
         filteredEvents={filteredEvents}
         classColors={classColors}
         
-        // Modal Props
-        openEditTaskModal={(task) => openTaskModal(task)}
+        // --- FIXED: Prop name matched to CalendarView definition ---
+        onEventClick={(task) => openTaskModal(task)}
+        
+        // Optional: Open "New Task" modal when clicking an empty calendar cell
+        onDateClick={(dateStr) => openTaskModal({ date: dateStr })} 
         
         // Drag Props
         draggedEventId={dragLogic.draggedEventId}

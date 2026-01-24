@@ -1,28 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Trash2, Save } from "lucide-react";
-import { useUI } from "../../context/PlannerContext"; // Fixed Import
-import { useData } from "../../context/DataContext";    // Fixed Import
+import { useUI } from "../../context/PlannerContext";
+import { useData } from "../../context/DataContext";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
 
-const TaskModal = () => {
-  // 1. UI Context: Handles the Modal visibility and the "Editing" state
-  const { 
-    modals, 
-    closeModal, 
-    editingTask 
-  } = useUI();
+const TaskModal = ({ requestDelete }) => {
+  const { modals, closeModal, editingTask } = useUI();
+  const { addEvent, updateEvent, deleteEvent, classColors } = useData();
 
-  // 2. Data Context: Handles the database operations
-  const { 
-    addEvent, 
-    updateEvent, 
-    deleteEvent, 
-    classColors 
-  } = useData();
-
-  // Helper: Get classes from the keys of the colors object
   const classes = Object.keys(classColors);
   const isOpen = modals.task;
 
@@ -36,12 +23,10 @@ const TaskModal = () => {
     description: "",
   });
 
-  // Load data when editing
   useEffect(() => {
     if (editingTask) {
       setFormData(editingTask);
     } else {
-      // Default to "Tomorrow" if creating new
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       setFormData({
@@ -54,12 +39,11 @@ const TaskModal = () => {
         description: "",
       });
     }
-  }, [editingTask, isOpen]); // removed 'classes' dependency to prevent loop reset
+  }, [editingTask, isOpen]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (editingTask) {
-      // Ensure we keep the original ID when updating
       updateEvent({ ...editingTask, ...formData });
     } else {
       addEvent(formData);
@@ -67,21 +51,29 @@ const TaskModal = () => {
     closeModal("task");
   };
 
-  const handleDelete = () => {
-    if (editingTask && confirm("Are you sure you want to delete this task?")) {
-      deleteEvent(editingTask.id);
-      closeModal("task");
+  // Logic: Use the prop if provided (ModalManager flow), otherwise direct (fallback)
+  const handleDeleteClick = () => {
+    if (!editingTask) return;
+    
+    if (requestDelete) {
+      // Pass the actual delete ACTION as a callback to the manager
+      requestDelete(() => deleteEvent(editingTask.id));
+    } else {
+      // Fallback if used outside ModalManager
+      if (confirm("Are you sure?")) {
+        deleteEvent(editingTask.id);
+        closeModal("task");
+      }
     }
   };
 
-  // Footer Actions
   const footer = (
     <>
       {editingTask && (
         <Button 
           variant="danger" 
-          onClick={handleDelete} 
-          className="mr-auto" // Pushes delete button to the left
+          onClick={handleDeleteClick} 
+          className="mr-auto"
           icon={Trash2}
         >
           Delete
@@ -105,7 +97,6 @@ const TaskModal = () => {
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Title */}
         <Input
           label="Task Title"
           value={formData.title}
@@ -115,7 +106,6 @@ const TaskModal = () => {
           autoFocus
         />
 
-        {/* Grid for Class & Type */}
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Class</label>
@@ -139,15 +129,13 @@ const TaskModal = () => {
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
               className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
             >
-              <option value="Homework">Homework</option>
-              <option value="Exam">Exam</option>
-              <option value="Project">Project</option>
-              <option value="Quiz">Quiz</option>
+              {["Homework", "Exam", "Project", "Quiz", "Lab", "Reading"].map(t => (
+                 <option key={t} value={t}>{t}</option>
+              ))}
             </select>
           </div>
         </div>
 
-        {/* Grid for Date, Time, Priority */}
         <div className="grid grid-cols-3 gap-4">
           <Input
             label="Date"
@@ -178,7 +166,6 @@ const TaskModal = () => {
           </div>
         </div>
 
-        {/* Description */}
         <div className="space-y-1.5">
           <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Description</label>
           <textarea

@@ -1,16 +1,36 @@
 import React, { useState } from "react";
-import { Settings, BookOpen, Database, RefreshCw, X } from "lucide-react";
+import { BookOpen, Database, RefreshCw } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 
-// Import your sub-components here (Ensure paths match your Step 1 cleanup)
 import ClassManager from "../features/settings/ClassManager";
 import ImportContent from "../features/settings/ImportContent";
 import SyncRoomContent from "../features/settings/SyncRoomContent";
-// If you haven't moved these yet, point to the old location or creating placeholders
 
-const SettingsModal = () => {
+const SettingsModal = ({ 
+  // Class Props
+  classColors,
+  setClassColors,
+  deleteClass,
+  mergeSource,
+  setMergeSource,
+  mergeTarget,
+  setMergeTarget,
+  mergeClasses,
+  
+  // Data Props
+  resetAllData,
+  handleICSExport,
+  onOpenJsonEditor,
+
+  // New Prop from DataContext via ModalManager wrapper (or we can useData directly inside if we refactored, but sticking to prop drill for now)
+  // Actually, SettingsModal is a child of ModalManager. 
+  // We need to make sure ModalManager passes this prop or we assume ClassManager uses useData directly. 
+  // Given previous architecture, we should update ModalManager or update SettingsModal to consume hook.
+  // For consistency with previous file dumps, let's assume we pass it down.
+  onRefreshColors, 
+}) => {
   const { modals, closeModal } = useUI();
   const [activeTab, setActiveTab] = useState("classes");
 
@@ -22,8 +42,27 @@ const SettingsModal = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case "classes": return <ClassManager />;
-      case "data": return <ImportContent />; // Or a wrapper containing Import/Export/DateCleaner
+      case "classes": return (
+        <ClassManager 
+          classColors={classColors}
+          setClassColors={setClassColors}
+          onDeleteClass={deleteClass}
+          onRefreshColors={onRefreshColors} // Pass it here
+          mergeSource={mergeSource}
+          setMergeSource={setMergeSource}
+          mergeTarget={mergeTarget}
+          setMergeTarget={setMergeTarget}
+          onMerge={mergeClasses}
+        />
+      );
+      case "data": return (
+        <ImportContent 
+           resetData={resetAllData}
+           onExport={handleICSExport}
+           onOpenJsonEditor={onOpenJsonEditor}
+           onCloseModal={() => closeModal("settings")}
+        />
+      );
       case "sync": return <SyncRoomContent />;
       default: return null;
     }
@@ -37,7 +76,6 @@ const SettingsModal = () => {
       size="xl"
     >
       <div className="flex flex-col md:flex-row gap-6 min-h-[400px]">
-        {/* Sidebar Navigation */}
         <aside className="w-full md:w-48 flex flex-col gap-1 shrink-0">
           {tabs.map((tab) => (
             <Button
@@ -56,7 +94,6 @@ const SettingsModal = () => {
           ))}
         </aside>
 
-        {/* Content Area */}
         <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-divider">
           {renderContent()}
         </div>
