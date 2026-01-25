@@ -7,11 +7,12 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { useAuth } from "./AuthContext";
-import { useSocketSync } from "../hooks/useSocketSync";
-import { STORAGE_KEYS, PALETTE } from "../utils/constants"; // Imported PALETTE
-import { generateICS } from "../utils/helpers";
-import { processICSContent } from "../utils/icsHelpers";
+import { addDays, format, parseISO, isAfter } from "date-fns";
+import { useAuth } from "./AuthContext.jsx";
+import { useSocketSync } from "../hooks/useSocketSync.js";
+import { STORAGE_KEYS, PALETTE } from "../utils/constants.js";
+import { generateICS } from "../utils/helpers.js";
+import { processICSContent } from "../utils/icsHelpers.js";
 
 const DataContext = createContext();
 
@@ -77,39 +78,126 @@ export const DataProvider = ({ children }) => {
     classColors,
   );
 
-  // ... (Existing addEvent, updateEvent, deleteEvent, bulkAddEvents wrappers remain unchanged)
-  const addEvent = useCallback(
-    (event) => {
-      const eventWithId = { ...event, id: event.id || crypto.randomUUID() };
-      if (isAuthorized) serverAdd(eventWithId);
-      else setEvents((prev) => [...prev, eventWithId]);
-    },
-    [isAuthorized, serverAdd],
-  );
-
-  const updateEvent = useCallback(
-    (event) => {
-      if (isAuthorized) serverUpdate(event);
-      else
-        setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
-    },
-    [isAuthorized, serverUpdate],
-  );
-
-  const deleteEvent = useCallback(
-    (id) => {
-      if (isAuthorized) serverDelete(id);
-      else setEvents((prev) => prev.filter((e) => e.id !== id));
-    },
-    [isAuthorized, serverDelete],
-  );
-
   const bulkAddEvents = useCallback(
     (newEvents) => {
       if (isAuthorized) serverBulkAdd(newEvents);
       else setEvents((prev) => [...prev, ...newEvents]);
     },
     [isAuthorized, serverBulkAdd],
+  );
+
+  const addEvent = useCallback(
+    (event) => {
+      if (
+        event.recurrence &&
+        event.recurrence !== "none" &&
+        event.recurrenceEnd
+      ) {
+        const eventsToCreate = [];
+        const groupId = crypto.randomUUID();
+        const startDate = parseISO(event.date);
+        const endDate = parseISO(event.recurrenceEnd);
+        let current = startDate;
+
+        const interval = event.recurrence === "weekly" ? 7 : 14;
+
+        while (!isAfter(current, endDate)) {
+          eventsToCreate.push({
+            ...event,
+            id: crypto.randomUUID(),
+            groupId,
+            date: format(current, "yyyy-MM-dd"),
+          });
+          current = addDays(current, interval);
+        }
+
+        bulkAddEvents(eventsToCreate);
+      } else {
+        const eventWithId = { ...event, id: event.id || crypto.randomUUID() };
+        if (isAuthorized) serverAdd(eventWithId);
+        else setEvents((prev) => [...prev, eventWithId]);
+      }
+    },
+    [isAuthorized, serverAdd, bulkAddEvents],
+  );
+
+  const updateEvent = useCallback(
+    (event) => {
+      if (event.editScope === "series" && event.groupId) {
+        const {
+          title,
+          description,
+          time,
+          type,
+          priority,
+          class: className,
+        } = event;
+
+        const siblings = eventsRef.current.filter(
+          (e) => e.groupId === event.groupId,
+        );
+
+        if (isAuthorized) {
+          siblings.forEach((sibling) => {
+            serverUpdate({
+              ...sibling,
+              title,
+              description,
+              time,
+              type,
+              priority,
+              class: className,
+            });
+          });
+        } else {
+          setEvents((prev) =>
+            prev.map((e) => {
+              if (e.groupId === event.groupId) {
+                return {
+                  ...e,
+                  title,
+                  description,
+                  time,
+                  type,
+                  priority,
+                  class: className,
+                };
+              }
+              return e;
+            }),
+          );
+        }
+      } else {
+        if (isAuthorized) serverUpdate(event);
+        else
+          setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
+      }
+    },
+    [isAuthorized, serverUpdate],
+  );
+
+  // --- UPDATED: deleteEvent now handles series deletion ---
+  const deleteEvent = useCallback(
+    (id, deleteSeries = false, groupId = null) => {
+      if (deleteSeries && groupId) {
+        // Find all events in the series
+        const eventsToDelete = eventsRef.current.filter(e => e.groupId === groupId);
+        
+        if (isAuthorized) {
+           // For authorized rooms, we delete each event individually 
+           // since we don't have a direct "bulkDelete" exposed yet.
+           eventsToDelete.forEach(ev => serverDelete(ev.id));
+        } else {
+           // Local delete: filter out everything in the group
+           setEvents((prev) => prev.filter((e) => e.groupId !== groupId));
+        }
+      } else {
+        // Standard single delete
+        if (isAuthorized) serverDelete(id);
+        else setEvents((prev) => prev.filter((e) => e.id !== id));
+      }
+    },
+    [isAuthorized, serverDelete],
   );
 
   const handleSetClassColors = useCallback(
@@ -133,10 +221,9 @@ export const DataProvider = ({ children }) => {
           );
       }
     },
-    [isAuthorized, serverUpdate], 
+    [isAuthorized, serverUpdate],
   );
 
-  // ... (deleteClass, mergeClasses, renameClass remain unchanged)
   const deleteClass = useCallback(
     (className) => {
       const newColors = { ...classColors };
@@ -182,25 +269,25 @@ export const DataProvider = ({ children }) => {
     [events, classColors, handleSetClassColors, isAuthorized, serverUpdate],
   );
 
-  // --- NEW FUNCTION: Scans existing tasks for missing class colors ---
   const refreshClassColors = useCallback(() => {
-    const uniqueClasses = new Set(events.map(e => e.class).filter(c => c && c !== "General"));
+    const uniqueClasses = new Set(
+      events.map((e) => e.class).filter((c) => c && c !== "General"),
+    );
     const newColors = { ...classColors };
     let hasChanges = false;
     let colorIndex = Object.keys(newColors).length;
-    
-    uniqueClasses.forEach(cls => {
+
+    uniqueClasses.forEach((cls) => {
       if (!newColors[cls]) {
         newColors[cls] = PALETTE[colorIndex % PALETTE.length];
         colorIndex++;
         hasChanges = true;
       }
     });
-    
-    // Ensure "General" always has a color if used
+
     if (!newColors["General"]) {
-       newColors["General"] = "#94a3b8"; // Slate-400
-       hasChanges = true;
+      newColors["General"] = "#94a3b8";
+      hasChanges = true;
     }
 
     if (hasChanges) {
@@ -209,7 +296,6 @@ export const DataProvider = ({ children }) => {
     }
     return false;
   }, [events, classColors, handleSetClassColors]);
-
 
   const importJsonData = useCallback(
     (jsonString, append = false) => {
@@ -221,8 +307,6 @@ export const DataProvider = ({ children }) => {
             else setEvents([]);
           }
           bulkAddEvents(data);
-          // Optional: You could auto-call refreshClassColors here, 
-          // but we will stick to the manual button as requested.
           return { success: true };
         }
         return { success: false, error: "Invalid JSON format" };
@@ -234,7 +318,6 @@ export const DataProvider = ({ children }) => {
     [bulkAddEvents, isAuthorized, serverClear],
   );
 
-  // ... (exportICS, handleProcessICS, resetAllData remain unchanged)
   const exportICS = useCallback(() => {
     const content = generateICS(events);
     const blob = new Blob([content], { type: "text/calendar" });
@@ -283,7 +366,7 @@ export const DataProvider = ({ children }) => {
       deleteClass,
       mergeClasses,
       renameClass,
-      refreshClassColors, // Exporting the new function
+      refreshClassColors,
       importJsonData,
       exportICS,
       processICSContent: handleProcessICS,
@@ -303,7 +386,7 @@ export const DataProvider = ({ children }) => {
       deleteClass,
       mergeClasses,
       renameClass,
-      refreshClassColors, // Exporting the new function
+      refreshClassColors,
       importJsonData,
       exportICS,
       handleProcessICS,
