@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { BookOpen, Database, RefreshCw, ChevronRight } from "lucide-react";
+import { BookOpen, Database, RefreshCw, ChevronRight, Wrench } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import Modal from "../ui/Modal";
 
 import ClassManager from "../features/settings/ClassManager";
 import ImportContent from "../features/settings/ImportContent";
 import SyncRoomContent from "../features/settings/SyncRoomContent";
+import DateCleanerContent from "../features/settings/DateCleanerContent"; // RESTORED
 
 const SettingsModal = ({ 
   classColors,
@@ -28,6 +29,7 @@ const SettingsModal = ({
     { id: "classes", label: "Classes", icon: BookOpen },
     { id: "data", label: "Data & Sync", icon: Database },
     { id: "sync", label: "Sync", icon: RefreshCw },
+    { id: "tools", label: "Tools", icon: Wrench }, // RESTORED
   ];
 
   const renderContent = () => {
@@ -54,6 +56,20 @@ const SettingsModal = ({
         />
       );
       case "sync": return <SyncRoomContent />;
+      // RESTORED: Date Cleaner
+      case "tools": return (
+        <div className="space-y-6">
+           <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-xl border border-orange-100 dark:border-orange-900/20">
+              <h3 className="font-bold text-orange-800 dark:text-orange-200 mb-2 flex items-center gap-2">
+                 <Wrench className="w-4 h-4"/> Maintenance
+              </h3>
+              <p className="text-xs text-orange-700 dark:text-orange-300 mb-4 opacity-80">
+                 Use these tools to clean up old data or optimize your storage.
+              </p>
+              <DateCleanerContent onCloseModal={() => closeModal("settings")} />
+           </div>
+        </div>
+      );
       default: return null;
     }
   };

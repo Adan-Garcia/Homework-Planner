@@ -196,24 +196,36 @@ export const getContrastColor = (hexcolor) => {
   return yiq >= 128 ? "#000000" : "#ffffff";
 };
 
-// --- NEW HELPERS ---
-
-// Task Sorting: Time -> Priority -> Alphabetical
+// --- RESTORED LOGIC: Priority -> Time ---
 export const compareTasks = (a, b) => {
-  // 1. Date (if filtering a mixed list)
-  if (a.date !== b.date) return a.date.localeCompare(b.date);
+  const dateDiff = new Date(a.date) - new Date(b.date);
+  if (dateDiff !== 0) return dateDiff;
 
-  // 2. Time: specific times first, no-time (all day) last (or vice versa depending on preference).
-  // Standard planner: No time (all day) -> Specific Time
-  if (a.time && !b.time) return 1; 
+  // 1. Priority: High > Normal/Medium > Low
+  // Note: "Medium" and "Normal" are treated somewhat interchangeably in the app's history
+  const getPriorityWeight = (p) => {
+    if (p === "High") return 3;
+    if (p === "Medium" || p === "Normal") return 2;
+    return 1;
+  };
+  
+  const pA = getPriorityWeight(a.priority);
+  const pB = getPriorityWeight(b.priority);
+  
+  // Higher weight first (Descending)
+  if (pA !== pB) return pB - pA;
+
+  // 2. Time: No-time (All Day) vs Specific Time
+  // Preference: All Day events at the TOP (or bottom depending on taste, but usually top)
+  // Let's stick to standard: All Day (no time) comes before Time
   if (!a.time && b.time) return -1;
-  if (a.time && b.time && a.time !== b.time) return a.time.localeCompare(b.time);
-
-  // 3. Priority: High > Normal > Low
-  const pWeight = { High: 3, Normal: 2, Low: 1 };
-  const pA = pWeight[a.priority] || 2;
-  const pB = pWeight[b.priority] || 2;
-  if (pA !== pB) return pB - pA; // Descending
+  if (a.time && !b.time) return 1;
+  
+  // 3. Specific Time Compare
+  if (a.time && b.time) {
+      const timeDiff = a.time.localeCompare(b.time);
+      if (timeDiff !== 0) return timeDiff;
+  }
 
   // 4. Alphabetical
   return a.title.localeCompare(b.title);

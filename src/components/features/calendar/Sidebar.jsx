@@ -6,14 +6,16 @@ import Button from "../../ui/Button";
 import { useUI } from "../../../context/PlannerContext"; 
 
 const Sidebar = ({
-  filteredEvents,
-  classColors,
+  filteredEvents = [],
+  classColors = {},
   toggleTask,
   openEditTaskModal,
   searchQuery,
   setSearchQuery,
   activeTypeFilter,
   setActiveTypeFilter,
+  hiddenClasses = [],
+  setHiddenClasses = () => {},
   showCompleted,
   setShowCompleted,
   hideOverdue,
@@ -27,17 +29,48 @@ const Sidebar = ({
 
   const groupedTasks = useMemo(() => {
     const groups = { overdue: [], today: [], tomorrow: [], upcoming: [] };
+    
+    // Guard clause in case filteredEvents is null/undefined during initial load
+    if (!filteredEvents || !Array.isArray(filteredEvents)) return groups;
+
     filteredEvents.forEach((task) => {
       if (!task.date) return;
-      const taskDate = parseISO(task.date);
+      // Safety check for date string validity
+      let taskDate;
+      try {
+        taskDate = parseISO(task.date);
+      } catch (e) {
+        return;
+      }
+      
+      // If hiding completed tasks globally, skip
       if (task.completed && !showCompleted) return;
-      if (!task.completed && isPast(taskDate) && !isToday(taskDate)) {
-        groups.overdue.push(task);
-      } else if (isToday(taskDate)) {
+
+      const isTaskOverdue = isPast(taskDate) && !isToday(taskDate);
+      
+      // Logic Fix:
+      // 1. Overdue: Only show if NOT completed (and strictly past)
+      // 2. Today: Show regardless of completion (if showCompleted is true)
+      // 3. Tomorrow: Show regardless of completion
+      // 4. Upcoming: Show regardless of completion, BUT exclude past completed tasks that might slip through
+
+      if (isTaskOverdue) {
+        if (!task.completed) {
+           groups.overdue.push(task);
+        }
+        // If it is overdue AND completed, we implicitly hide it from 'overdue' group.
+        // And we must ensure it doesn't fall through to 'upcoming'.
+        return; 
+      }
+      
+      if (isToday(taskDate)) {
         groups.today.push(task);
       } else if (isTomorrow(taskDate)) {
         groups.tomorrow.push(task);
       } else {
+        // This is the upcoming bucket (future dates beyond tomorrow)
+        // Since we already handled 'isTaskOverdue' (past dates), this block implies future dates.
+        // So we can safely push here.
         groups.upcoming.push(task);
       }
     });
@@ -80,7 +113,7 @@ const Sidebar = ({
       <div className="flex-1 min-w-0 py-0.5">
         <div className="flex items-center justify-between gap-2 mb-1.5">
            <div className="flex items-center gap-1.5 min-w-0">
-                <span className="w-2 h-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }} />
+                <span className="w-2 h-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: classColors?.[task.class] || "#cbd5e1" }} />
                 <span className="text-[10px] font-bold uppercase tracking-wider text-secondary truncate opacity-80">
                     {task.class}
                 </span>
@@ -105,6 +138,7 @@ const Sidebar = ({
                 High
              </span>
            )}
+           {/* Show repeating icon if needed, though data might not have it explicitly here unless grouped */}
         </div>
       </div>
       
@@ -116,7 +150,8 @@ const Sidebar = ({
     </div>
   );
 
-  const DropZone = ({ title, groupKey, icon: Icon, items, isDanger, accentColor = "text-slate-500" }) => (
+  // Default items to empty array to prevent crash reading .length of undefined
+  const DropZone = ({ title, groupKey, icon: Icon, items = [], isDanger, accentColor = "text-slate-500" }) => (
     <div
       onDragOver={handleDragOver}
       onDrop={(e) => handleSidebarDrop(e, groupKey)}
@@ -128,15 +163,15 @@ const Sidebar = ({
           {title}
         </div>
         <span className="bg-black/5 dark:bg-white/10 text-secondary px-2.5 py-0.5 rounded-full text-[10px] font-bold">
-            {items.length}
+            {items ? items.length : 0}
         </span>
       </div>
       
       <div className={`flex flex-col gap-3 min-h-[20px] transition-all rounded-3xl ${draggedEventId ? "p-3 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-dashed border-blue-200 dark:border-blue-800" : ""}`}>
-        {items.map((task) => (
+        {items && items.map((task) => (
           <TaskItem key={task.id} task={task} />
         ))}
-        {items.length === 0 && (
+        {(!items || items.length === 0) && (
           <div className="text-center py-6 text-xs text-slate-300 dark:text-slate-600 italic">
             No tasks
           </div>
@@ -211,12 +246,54 @@ const Sidebar = ({
               Done
             </Button>
           </div>
+
+          {/* RESTORED: Class Filters */}
+          <div className="pt-2 border-t border-black/5 dark:border-white/5">
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+              <button
+                onClick={() => setHiddenClasses([])}
+                className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${
+                  hiddenClasses.length === 0 
+                    ? "bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-sm" 
+                    : "bg-white/50 dark:bg-white/5 text-secondary border border-black/5 dark:border-white/5 hover:bg-white dark:hover:bg-white/10"
+                }`}
+              >
+                All
+              </button>
+              {classColors && Object.keys(classColors).map((cls) => (
+                <button
+                  key={cls}
+                  onClick={() =>
+                    setHiddenClasses((prev) =>
+                      prev.includes(cls)
+                        ? prev.filter((c) => c !== cls)
+                        : [...prev, cls]
+                    )
+                  }
+                  className={`
+                    text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1.5 transition-all
+                    ${hiddenClasses.includes(cls) 
+                        ? "opacity-50 grayscale bg-transparent border border-transparent text-secondary" 
+                        : "bg-white/50 dark:bg-white/5 border border-black/5 dark:border-white/5 shadow-sm hover:bg-white dark:hover:bg-white/10"
+                    }
+                  `}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ backgroundColor: classColors[cls] }}
+                  />
+                  {cls}
+                </button>
+              ))}
+            </div>
+          </div>
+
         </div>
 
         {/* Task List Container */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-8 pb-32 mask-gradient-b">
           
-          {(!hideOverdue && groupedTasks.overdue.length > 0) && (
+          {(!hideOverdue && groupedTasks.overdue && groupedTasks.overdue.length > 0) && (
             <DropZone 
               title="Overdue" 
               groupKey="overdue"

@@ -10,7 +10,7 @@ import ReLoginModal from "../features/auth/ReLoginModal";
 import JsonEditorModal from "../features/settings/JsonEditorModal";
 
 const ModalManager = () => {
-  const { modals, closeModal, openModal, editingTask } = useUI();
+  const { modals, closeModal, openModal, editingTask, view, setView } = useUI();
   
   const {
     events,
@@ -59,6 +59,10 @@ const ModalManager = () => {
     const result = importJsonData(jsonEditText, false); 
     if (result.success) {
       closeModal("jsonEdit");
+      // RESTORED: Redirect to planner view on success
+      if (view === "setup") {
+        setView("planner");
+      }
     } else {
       alert(`Invalid JSON: ${result.error}`);
     }

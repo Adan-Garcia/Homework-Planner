@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Trash2, Save } from "lucide-react";
+import { Trash2, Save, RefreshCw, Layers } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import { useData } from "../../context/DataContext";
 import Modal from "../ui/Modal";
@@ -21,11 +21,25 @@ const TaskModal = ({ requestDelete }) => {
     time: "",
     priority: "Normal",
     description: "",
+    // RESTORED: Recurrence fields
+    recurrence: "none",
+    recurrenceEnd: "",
+    // RESTORED: Grouping for series editing
+    groupId: null
   });
+
+  // RESTORED: All Day State
+  const [isAllDay, setIsAllDay] = useState(false);
+  
+  // RESTORED: Edit Scope State (Single vs Series)
+  const [editScope, setEditScope] = useState("single");
 
   useEffect(() => {
     if (editingTask) {
       setFormData(editingTask);
+      // Logic: If no time is set, assume All Day
+      setIsAllDay(!editingTask.time);
+      setEditScope("single");
     } else {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -37,29 +51,43 @@ const TaskModal = ({ requestDelete }) => {
         time: "",
         priority: "Normal",
         description: "",
+        recurrence: "none",
+        recurrenceEnd: "",
+        groupId: null
       });
+      setIsAllDay(false);
     }
   }, [editingTask, isOpen]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Prepare final object
+    const finalData = { 
+        ...formData,
+        time: isAllDay ? "" : formData.time 
+    };
+
     if (editingTask) {
-      updateEvent({ ...editingTask, ...formData });
+      // If editing a series, pass the editScope to the backend/context logic
+      // Note: context/DataContext might need to handle this prop if it's special
+      updateEvent({ 
+          ...editingTask, 
+          ...finalData,
+          editScope // Passing this allows the backend or context to handle series updates
+      });
     } else {
-      addEvent(formData);
+      addEvent(finalData);
     }
     closeModal("task");
   };
 
-  // Logic: Use the prop if provided (ModalManager flow), otherwise direct (fallback)
   const handleDeleteClick = () => {
     if (!editingTask) return;
     
     if (requestDelete) {
-      // Pass the actual delete ACTION as a callback to the manager
       requestDelete(() => deleteEvent(editingTask.id));
     } else {
-      // Fallback if used outside ModalManager
       if (confirm("Are you sure?")) {
         deleteEvent(editingTask.id);
         closeModal("task");
@@ -144,12 +172,36 @@ const TaskModal = ({ requestDelete }) => {
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
           />
-          <Input
-            label="Time (Optional)"
-            type="time"
-            value={formData.time}
-            onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-          />
+          
+          {/* RESTORED: All Day Logic & UI */}
+          <div className="space-y-1.5 relative">
+            <div className="flex justify-between items-center">
+                 <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Time</label>
+                 <div className="flex items-center gap-1.5">
+                    <input 
+                        type="checkbox" 
+                        id="allDay" 
+                        checked={isAllDay} 
+                        onChange={(e) => setIsAllDay(e.target.checked)}
+                        className="w-3 h-3 accent-blue-600 rounded cursor-pointer"
+                    />
+                    <label htmlFor="allDay" className="text-[10px] font-bold text-blue-600 dark:text-blue-400 cursor-pointer">All Day</label>
+                 </div>
+            </div>
+            <div className="relative">
+                <input
+                    type="time"
+                    value={formData.time}
+                    disabled={isAllDay}
+                    onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                    className={`
+                        w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none 
+                        ${isAllDay ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800" : "focus:ring-2 focus:ring-blue-500/20"}
+                    `}
+                />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Priority</label>
             <select
@@ -176,6 +228,68 @@ const TaskModal = ({ requestDelete }) => {
             placeholder="Add details, links, or notes..."
           />
         </div>
+
+        {/* RESTORED: Recurrence UI */}
+        {!editingTask ? (
+           <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-100 dark:border-slate-600/50 space-y-3">
+               <div className="flex items-center gap-2">
+                   <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Recurrence</label>
+               </div>
+               <div className="grid grid-cols-2 gap-3">
+                   <select
+                        value={formData.recurrence}
+                        onChange={(e) => setFormData({ ...formData, recurrence: e.target.value })}
+                        className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs dark:text-white outline-none"
+                   >
+                       <option value="none">No Repeat</option>
+                       <option value="weekly">Weekly</option>
+                       <option value="biweekly">Every 2 Weeks</option>
+                   </select>
+                   <input 
+                        type="date"
+                        value={formData.recurrenceEnd}
+                        onChange={(e) => setFormData({ ...formData, recurrenceEnd: e.target.value })}
+                        disabled={formData.recurrence === 'none'}
+                        className={`w-full p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs dark:text-white outline-none ${formData.recurrence === 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                   />
+               </div>
+           </div>
+        ) : (
+            // RESTORED: Series Edit UI
+            editingTask.groupId && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-100 dark:border-amber-900/30">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Layers className="w-3.5 h-3.5 text-amber-500" />
+                        <label className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Repeating Task</label>
+                    </div>
+                    <div className="flex gap-4">
+                        <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-300 cursor-pointer">
+                            <input 
+                                type="radio" 
+                                name="editScope" 
+                                value="single" 
+                                checked={editScope === "single"}
+                                onChange={() => setEditScope("single")}
+                                className="accent-amber-500"
+                            />
+                            This Event Only
+                        </label>
+                        <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-300 cursor-pointer">
+                            <input 
+                                type="radio" 
+                                name="editScope" 
+                                value="series" 
+                                checked={editScope === "series"}
+                                onChange={() => setEditScope("series")}
+                                className="accent-amber-500"
+                            />
+                            Entire Series
+                        </label>
+                    </div>
+                </div>
+            )
+        )}
       </form>
     </Modal>
   );
