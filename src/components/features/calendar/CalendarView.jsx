@@ -67,6 +67,22 @@ const CalendarView = ({
     }
   };
 
+  // --- OPTIMIZATION: Pre-calculate events by date ---
+  const eventsByDate = useMemo(() => {
+    const map = {};
+    if (!filteredEvents) return map;
+
+    for (const event of filteredEvents) {
+      if (event.date) {
+        if (!map[event.date]) {
+          map[event.date] = [];
+        }
+        map[event.date].push(event);
+      }
+    }
+    return map;
+  }, [filteredEvents]);
+
   const CalendarTaskCard = ({ task, isCompact = false }) => (
     <div
       draggable={!task.completed}
@@ -125,7 +141,9 @@ const CalendarView = ({
         ? eachDayOfInterval({ start: startOfWeek(startOfMonth(currentDate)), end: endOfWeek(endOfMonth(currentDate)) })
         : eachDayOfInterval({ start: subDays(currentDate, 3), end: addDays(currentDate, 3) });
 
-    const selectedEvents = filteredEvents.filter(e => e.date === format(currentDate, "yyyy-MM-dd"));
+    // Optimization: Use lookup map instead of filter
+    const selectedDateKey = format(currentDate, "yyyy-MM-dd");
+    const selectedEvents = eventsByDate[selectedDateKey] || [];
 
     return (
       <div className="flex flex-col h-full w-full mac-glass rounded-[32px] overflow-hidden">
@@ -151,8 +169,8 @@ const CalendarView = ({
                 {activeDays.map(day => {
                    const isSel = isSameDay(day, currentDate);
                    const isTodayDay = isToday(day);
-                   const hasEvent = filteredEvents.some(e => e.date === format(day, "yyyy-MM-dd"));
-                   
+                   const dayKey = format(day, "yyyy-MM-dd");
+                   const hasEvent = eventsByDate[dayKey] && eventsByDate[dayKey].length > 0;
                    if(isMonthView) {
                        return (
                            <button 
@@ -241,8 +259,9 @@ const CalendarView = ({
                         style={{ gridTemplateRows: `repeat(${weeksCount}, minmax(0, 1fr))` }}
                     >
                         {days.map((day, idx) => {
+                            // Optimization: Use lookup map
                             const dayKey = format(day, "yyyy-MM-dd");
-                            const dayEvents = filteredEvents.filter((e) => e.date === dayKey);
+                            const dayEvents = eventsByDate[dayKey] || [];
                             const isCurrentMonth = isSameMonth(day, currentDate);
                             const isTodayDay = isToday(day);
                             
@@ -290,19 +309,24 @@ const CalendarView = ({
                 {/* --- Week View --- */}
                 {calendarView === "week" && (
                 <div className="flex h-full w-full">
-                    {days.map((day, i) => (
+                    {days.map((day, i) => {
+                        // Optimization: Use lookup map
+                        const dayKey = format(day, "yyyy-MM-dd");
+                        const dayEvents = eventsByDate[dayKey] || [];
+
+                        return (
                         <div key={day.toString()} className={`flex-1 min-w-[140px] flex flex-col h-full min-h-0 ${i !== 6 ? 'border-r border-black/5 dark:border-white/5' : ''}`}>
                             <div className={`p-4 border-b border-black/5 dark:border-white/5 text-center shrink-0 ${isToday(day) ? "bg-blue-50/50 dark:bg-blue-900/10" : "bg-white/20 dark:bg-white/5"}`}>
                                 <div className={`text-xs font-bold uppercase mb-1 ${isToday(day) ? "text-[#007AFF]" : "text-secondary"}`}>{format(day, "EEE")}</div>
                                 <div className={`text-2xl font-bold ${isToday(day) ? "text-[#007AFF]" : "text-primary"}`}>{format(day, "d")}</div>
                             </div>
                             <div className={`flex-1 p-2 space-y-2 overflow-y-auto custom-scrollbar ${isToday(day) ? "bg-blue-50/20" : ""}`}>
-                                {filteredEvents.filter(e => e.date === format(day, "yyyy-MM-dd")).map(task => (
+                                {dayEvents.map(task => (
                                     <CalendarTaskCard key={task.id} task={task} />
                                 ))}
                             </div>
                         </div>
-                    ))}
+                    )})}
                 </div>
                 )}
                 
@@ -321,9 +345,11 @@ const CalendarView = ({
                             {/* Vertical line through entire timeline */}
                             <div className="absolute left-[7.5rem] top-0 bottom-0 w-px bg-black/5 dark:bg-white/5 hidden md:block" />
 
-                            {filteredEvents
-                                .filter(e => calendarView === 'day' ? e.date === format(currentDate, "yyyy-MM-dd") : true)
-                                .map(task => (
+                            {/* Optimization: Use lookup map for 'day' view */}
+                            {(calendarView === 'day' 
+                                ? (eventsByDate[format(currentDate, "yyyy-MM-dd")] || []) 
+                                : filteredEvents
+                            ).map(task => (
                                 <div key={task.id} className="flex gap-8 items-start group">
                                     <div className="w-24 text-right pt-4 shrink-0 hidden md:block">
                                         <div className="text-sm font-bold text-primary">
@@ -343,9 +369,13 @@ const CalendarView = ({
                                         <CalendarTaskCard task={task} />
                                     </div>
                                 </div>
-                                ))
-                            }
-                            {filteredEvents.length === 0 && (
+                            ))}
+                            
+                            {/* Empty State */}
+                            {(calendarView === 'day' 
+                                ? (!eventsByDate[format(currentDate, "yyyy-MM-dd")] || eventsByDate[format(currentDate, "yyyy-MM-dd")].length === 0)
+                                : filteredEvents.length === 0
+                            ) && (
                                 <div className="text-center py-20 text-secondary italic">
                                     No events found
                                 </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"; // 1. Added useMemo, useCallback
 import { STORAGE_KEYS } from "../utils/constants.js";
 
 const UIContext = createContext();
@@ -56,45 +56,65 @@ export const UIProvider = ({ children }) => {
     else document.documentElement.classList.remove("dark");
   }, [darkMode]);
 
-  const openModal = (name) => setModals((prev) => ({ ...prev, [name]: true }));
-  const closeModal = (name) =>
-    setModals((prev) => ({ ...prev, [name]: false }));
+  // 2. Wrap functions in useCallback to stabilize references
+  const openModal = useCallback((name) => {
+    setModals((prev) => ({ ...prev, [name]: true }));
+  }, []);
 
-  const openTaskModal = (task = null) => {
+  const closeModal = useCallback((name) => {
+    setModals((prev) => ({ ...prev, [name]: false }));
+  }, []);
+
+  const openTaskModal = useCallback((task = null) => {
     setEditingTask(task);
     openModal("task");
-  };
+  }, [openModal]);
+
+  // 3. Memoize the value object
+  const value = useMemo(() => ({
+    darkMode,
+    setDarkMode,
+    calendarView,
+    setCalendarView,
+    view,
+    setView,
+    currentDate,
+    setCurrentDate,
+    searchQuery,
+    setSearchQuery,
+    activeTypeFilter,
+    setActiveTypeFilter,
+    showCompleted,
+    setShowCompleted,
+    hideOverdue,
+    setHideOverdue,
+    modals,
+    openModal,
+    closeModal,
+    editingTask,
+    setEditingTask,
+    openTaskModal,
+    mobileMenuOpen,
+    setMobileMenuOpen,
+  }), [
+    darkMode,
+    calendarView,
+    view,
+    currentDate,
+    searchQuery,
+    activeTypeFilter,
+    showCompleted,
+    hideOverdue,
+    modals,
+    editingTask,
+    mobileMenuOpen,
+    openModal,
+    closeModal,
+    openTaskModal
+  ]);
 
   return (
-    <UIContext.Provider
-      value={{
-        darkMode,
-        setDarkMode,
-        calendarView,
-        setCalendarView,
-        view,
-        setView,
-        currentDate,
-        setCurrentDate,
-        searchQuery,
-        setSearchQuery,
-        activeTypeFilter,
-        setActiveTypeFilter,
-        showCompleted,
-        setShowCompleted,
-        hideOverdue,
-        setHideOverdue,
-        modals,
-        openModal,
-        closeModal,
-        editingTask,
-        setEditingTask,
-        openTaskModal,
-        // Export new state
-        mobileMenuOpen,
-        setMobileMenuOpen,
-      }}
-    >
+    <UIContext.Provider value={value}>
       {children}
     </UIContext.Provider>
   );

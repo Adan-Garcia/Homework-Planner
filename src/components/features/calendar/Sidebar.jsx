@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo,useState, useEffect } from "react";
 import { Check, Clock, Calendar, AlertCircle, GripVertical, X, Filter, Circle } from "lucide-react";
 import { isToday, isTomorrow, isPast, parseISO } from "date-fns";
 import Input from "../../ui/Input";
@@ -24,7 +24,14 @@ const Sidebar = ({
   handleDragOver,
   handleSidebarDrop,
 }) => {
-  
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchQuery(localSearch);
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [localSearch, setSearchQuery]);
   const { mobileMenuOpen, setMobileMenuOpen } = useUI(); 
 
   const groupedTasks = useMemo(() => {
@@ -214,8 +221,8 @@ const Sidebar = ({
           <div className="relative">
              <Input
                 placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={localSearch}
+                onChange={(e) => setLocalSearch(e.target.value)}
                 className="mac-input-glass !rounded-xl !pl-9"
              />
              <Filter className="absolute left-3 top-3 w-4 h-4 text-secondary opacity-50" />
