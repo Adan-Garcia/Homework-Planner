@@ -22,7 +22,7 @@
     display: none;
   }
 }
-
+@custom-variant dark (&:where(.dark, .dark *));
 @layer components {
   /* Layout */
   .layout-card-open {

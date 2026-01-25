@@ -88,13 +88,14 @@ const MainLayout = ({ children }) => {
             <span className="hidden sm:inline">New</span>
           </Button>
           
-          <div className="hidden sm:flex items-center gap-1">
+          {/* REMOVED 'hidden sm:flex' to show on mobile */}
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              onClick={() => setDarkMode(!darkMode)}
+              onClick={() => setDarkMode(prev => !prev)} // Change this line
               className="p-2 text-secondary"
             >
-               {darkMode ? <Sun className="icon-sm" /> : <Moon className="icon-sm" />}
+              {darkMode ? <Sun className="icon-sm" /> : <Moon className="icon-sm" />}
             </Button>
             
             <Button
