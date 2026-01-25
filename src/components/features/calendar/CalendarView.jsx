@@ -19,8 +19,9 @@ import {
   isPast,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Clock, Check, Flag } from "lucide-react";
-import Button from "../../ui/Button";
-import Card from "../../ui/Card";
+// Traversing up to 'src' (components/features/calendar -> ../../../) to be safe
+import Button from "../../../components/ui/Button";
+import Card from "../../../components/ui/Card";
 import { urlRegex } from "../../../utils/helpers";
 
 // --- Linkify Component ---
@@ -63,7 +64,7 @@ const CalendarView = ({
   draggedEventId,
   handleDragStart,
   handleDragOver,
-  handleCalendarDrop, // Maps to handleDrop in App.jsx
+  handleCalendarDrop,
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -97,7 +98,6 @@ const CalendarView = ({
       start = currentDate;
       end = currentDate;
     }
-    // Note: Agenda doesn't use calendarDays like the grid views do.
 
     return eachDayOfInterval({ start, end });
   }, [currentDate, calendarView]);
@@ -142,14 +142,14 @@ const CalendarView = ({
     </Card>
   );
 
-  // 2. Month Cell Component (With Overflow)
+  // 2. Month Cell Component
   const MonthCell = ({ day }) => {
     const dayKey = format(day, "yyyy-MM-dd");
     const dayEvents = filteredEvents.filter((e) => e.date === dayKey);
     const isCurrentMonth = isSameMonth(day, currentDate);
     const isDayToday = isToday(day);
 
-    // Overflow Logic
+    // Overflow Logic - Adjusted for mobile
     const MAX_VISIBLE = 3;
     const visibleEvents = dayEvents.slice(0, MAX_VISIBLE);
     const hiddenCount = dayEvents.length - MAX_VISIBLE;
@@ -160,32 +160,44 @@ const CalendarView = ({
         onDrop={(e) => handleCalendarDrop(e, dayKey)}
         onClick={() => onDateClick && onDateClick(dayKey)}
         className={`
-          min-h-[100px] border-b border-r border-divider p-1 transition-colors relative group
+          min-h-[80px] sm:min-h-[100px] border-b border-r border-divider p-0.5 sm:p-1 transition-colors relative group flex flex-col
           ${!isCurrentMonth ? "bg-slate-50/50 dark:bg-slate-900/30 text-secondary" : "bg-white dark:bg-slate-900"}
           ${isDayToday ? "bg-blue-50/30 dark:bg-blue-900/10" : ""}
           hover:bg-slate-50 dark:hover:bg-slate-800/50
         `}
       >
-        <div className="flex justify-between items-start p-1 mb-1">
+        <div className="flex justify-between items-start p-0.5 mb-0.5">
           <span
             className={`
-              text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full
+              text-[10px] sm:text-xs font-semibold w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full
               ${isDayToday ? "bg-blue-600 text-white" : "text-secondary"}
             `}
           >
             {format(day, "d")}
           </span>
-          <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-opacity">
-             <div className="w-2 h-2 bg-slate-300 rounded-full" />
-          </button>
         </div>
 
-        <div className="flex flex-col gap-0.5">
-          {visibleEvents.map((task) => (
-            <CalendarTaskCard key={task.id} task={task} isCompact={true} />
-          ))}
+        <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
+          {/* Desktop/Tablet: Show cards */}
+          <div className="hidden sm:flex flex-col gap-0.5">
+            {visibleEvents.map((task) => (
+                <CalendarTaskCard key={task.id} task={task} isCompact={true} />
+            ))}
+          </div>
+          
+          {/* Mobile view: simple dots for events to save space */}
+          <div className="flex sm:hidden flex-wrap gap-1 content-start p-0.5">
+             {dayEvents.map(task => (
+                 <div 
+                    key={task.id} 
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }}
+                 />
+             ))}
+          </div>
+
           {hiddenCount > 0 && (
-             <div className="text-[10px] font-medium text-secondary text-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded">
+             <div className="hidden sm:block text-[10px] font-medium text-secondary text-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded mt-auto">
                 + {hiddenCount} more
              </div>
           )}
@@ -202,16 +214,16 @@ const CalendarView = ({
 
     return (
       <div 
-        className="flex-1 min-w-[150px] border-r border-divider flex flex-col"
+        className="flex-1 min-w-[120px] sm:min-w-[150px] border-r border-divider flex flex-col snap-center"
         onDragOver={handleDragOver}
         onDrop={(e) => handleCalendarDrop(e, dayKey)}
       >
         <div className={`p-2 border-b border-divider text-center sticky top-0 bg-inherit z-10 ${isDayToday ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}>
-          <div className="text-xs uppercase text-secondary font-bold">{format(day, "EEE")}</div>
-          <div className={`text-xl font-bold ${isDayToday ? "text-blue-600" : ""}`}>{format(day, "d")}</div>
+          <div className="text-[10px] sm:text-xs uppercase text-secondary font-bold">{format(day, "EEE")}</div>
+          <div className={`text-lg sm:text-xl font-bold ${isDayToday ? "text-blue-600" : ""}`}>{format(day, "d")}</div>
         </div>
         
-        <div className="flex-1 p-2 space-y-2 bg-slate-50/30 dark:bg-slate-900/30">
+        <div className="flex-1 p-1 sm:p-2 space-y-1 sm:space-y-2 bg-slate-50/30 dark:bg-slate-900/30">
           {dayEvents.map((task) => (
              <CalendarTaskCard key={task.id} task={task} />
           ))}
@@ -228,10 +240,10 @@ const CalendarView = ({
      return (
         <div className="mb-6">
            <div className={`sticky top-0 z-10 py-2 px-4 bg-slate-50 dark:bg-slate-800 border-y border-divider mb-3 flex items-baseline gap-2`}>
-              <span className={`text-lg font-bold ${isDayToday ? "text-blue-600" : "text-primary"}`}>
+              <span className={`text-base sm:text-lg font-bold ${isDayToday ? "text-blue-600" : "text-primary"}`}>
                  {format(dateObj, "EEEE")}
               </span>
-              <span className="text-sm text-secondary">
+              <span className="text-xs sm:text-sm text-secondary">
                  {format(dateObj, "MMMM do")}
               </span>
               {isDayToday && <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Today</span>}
@@ -246,7 +258,7 @@ const CalendarView = ({
                     style={{ borderLeftColor: classColors[task.class] || "#cbd5e1" }}
                  >
                     <div className="flex items-start gap-3">
-                       <div className="w-16 shrink-0 text-xs text-secondary font-mono pt-0.5">
+                       <div className="w-14 sm:w-16 shrink-0 text-[10px] sm:text-xs text-secondary font-mono pt-0.5">
                           {task.time || "All Day"}
                        </div>
                        <div className="flex-1 min-w-0">
@@ -275,14 +287,14 @@ const CalendarView = ({
   // --- Main Render ---
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900">
-      {/* 1. Header Navigation */}
-      <header className="flex items-center justify-between p-4 border-b border-divider shrink-0">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-bold text-primary">
-            {calendarView === "agenda" ? "Upcoming Agenda" : format(currentDate, "MMMM yyyy")}
-          </h2>
-          {calendarView !== "agenda" && (
-            <div className="flex items-center gap-1 ml-4 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+      {/* 1. Header Navigation - Updated for Mobile Stacking */}
+      <header className="flex flex-col sm:flex-row items-center justify-between p-3 sm:p-4 border-b border-divider shrink-0 gap-3 sm:gap-0">
+        <h2 className="text-lg sm:text-xl font-bold text-primary truncate w-full sm:w-auto text-center sm:text-left">
+          {calendarView === "agenda" ? "Upcoming Agenda" : format(currentDate, "MMMM yyyy")}
+        </h2>
+        
+        {calendarView !== "agenda" && (
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
                 <Button variant="ghost" onClick={() => navigate("prev")} className="!p-1">
                 <ChevronLeft className="w-5 h-5 text-secondary" />
                 </Button>
@@ -293,18 +305,17 @@ const CalendarView = ({
                 <ChevronRight className="w-5 h-5 text-secondary" />
                 </Button>
             </div>
-          )}
-        </div>
+        )}
       </header>
 
       {/* 2. Calendar Grid Body */}
       <div className="flex-1 overflow-auto custom-scrollbar bg-slate-100 dark:bg-black">
         
-        {/* Month View */}
+        {/* Month View - Responsive Grid */}
         {calendarView === "month" && (
-          <div className="grid grid-cols-7 min-h-full auto-rows-fr bg-divider gap-[1px] border-l border-divider">
+          <div className="grid grid-cols-7 min-h-full auto-rows-fr bg-divider gap-[1px] border-l border-divider w-full">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName) => (
-              <div key={dayName} className="p-2 text-center text-xs font-bold uppercase text-secondary bg-white dark:bg-slate-900">
+              <div key={dayName} className="p-1 sm:p-2 text-center text-[10px] sm:text-xs font-bold uppercase text-secondary bg-white dark:bg-slate-900 truncate">
                 {dayName}
               </div>
             ))}
@@ -314,21 +325,21 @@ const CalendarView = ({
           </div>
         )}
 
-        {/* Week View */}
+        {/* Week View - Responsive Snap Scroll */}
         {calendarView === "week" && (
-          <div className="flex h-full min-w-max bg-white dark:bg-slate-900">
+          <div className="flex h-full min-w-full bg-white dark:bg-slate-900 overflow-x-auto snap-x snap-mandatory">
             {calendarDays.map((day) => (
               <WeekColumn key={day.toString()} day={day} />
             ))}
           </div>
         )}
 
-        {/* Day View */}
+        {/* Day View - Adjusted Padding */}
         {calendarView === "day" && (
-           <div className="max-w-3xl mx-auto p-6 space-y-4">
+           <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
               <div className="text-center mb-6">
-                <div className="text-4xl font-bold text-primary">{format(currentDate, "EEEE")}</div>
-                <div className="text-xl text-secondary">{format(currentDate, "MMMM do, yyyy")}</div>
+                <div className="text-3xl sm:text-4xl font-bold text-primary">{format(currentDate, "EEEE")}</div>
+                <div className="text-lg sm:text-xl text-secondary">{format(currentDate, "MMMM do, yyyy")}</div>
               </div>
               <div className="space-y-3">
                 {filteredEvents
@@ -345,11 +356,10 @@ const CalendarView = ({
            </div>
         )}
 
-        {/* Agenda View (Updated) */}
+        {/* Agenda View */}
         {calendarView === "agenda" && (
-            <div className="max-w-4xl mx-auto pb-10">
+            <div className="max-w-4xl mx-auto pb-10 sm:px-4">
                 {(() => {
-                    // Group upcoming tasks by date
                     const todayStr = new Date().toISOString().split('T')[0];
                     const groups = {};
                     

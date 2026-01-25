@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+/* --- Global App Styles for Mobile Feel --- */
+@layer base {
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden; /* Prevent body scroll, handle inside containers */
+    overscroll-behavior: none; /* Prevent browser bounce/pull-to-refresh */
+    -webkit-tap-highlight-color: transparent; /* Remove tap highlight on buttons */
+  }
+}
+
+@layer utilities {
+  /* Utility to hide scrollbars but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;     /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;             /* Chrome, Safari and Opera */
+  }
+}
+
 @layer components {
   /* Layout */
   .layout-card-open {
@@ -133,17 +155,12 @@
   }
 }
 
+/* Redefined custom-scrollbar to be INVISIBLE by default for app-like feel */
+.custom-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  border-radius: 20px;
-}
-.dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #475569;
+  display: none;             /* Chrome, Safari and Opera */
 }

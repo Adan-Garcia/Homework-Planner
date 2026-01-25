@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { X } from "lucide-react";
-import Button from "./Button";
+import Button from "./Button.jsx";
 
 const Modal = ({ 
   isOpen, 
@@ -29,20 +29,22 @@ const Modal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
       
-      {/* Modal Content */}
+      {/* Modal Content - Mobile Bottom Sheet Style */}
       <div 
         className={`
           relative w-full ${sizeClasses[size]} 
           bg-white dark:bg-slate-900 
-          rounded-xl shadow-2xl border border-divider
-          flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200
+          rounded-t-2xl sm:rounded-xl shadow-2xl border border-divider
+          flex flex-col 
+          max-h-[90vh] sm:max-h-[85vh] 
+          animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0 sm:fade-in zoom-in-95 duration-200
         `}
       >
         {/* Header */}
@@ -60,7 +62,7 @@ const Modal = ({
 
         {/* Footer (Optional) */}
         {footer && (
-          <div className="px-6 py-4 border-t border-divider bg-slate-50/50 dark:bg-slate-800/30 rounded-b-xl shrink-0 flex justify-end gap-2">
+          <div className="px-6 py-4 border-t border-divider bg-slate-50/50 dark:bg-slate-800/30 rounded-b-xl shrink-0 flex justify-end gap-2 flex-wrap">
             {footer}
           </div>
         )}

@@ -1,12 +1,10 @@
-// adan-garcia/homework-planner/Homework-Planner-UI-Refactor/src/components/features/calendar/Sidebar.jsx
-
 import React, { useMemo } from "react";
-import { Check, Clock, Calendar, AlertCircle, GripVertical } from "lucide-react";
-import { format, isToday, isTomorrow, isPast, parseISO } from "date-fns";
+import { Check, Clock, Calendar, AlertCircle, GripVertical, X } from "lucide-react";
+import { isToday, isTomorrow, isPast, parseISO } from "date-fns";
 import Card from "../../ui/Card";
 import Input from "../../ui/Input";
-import Button from "../../ui/Button"; // Ensure this is imported if used
-import { useUI } from "../../../context/PlannerContext"; // Import Context
+import Button from "../../ui/Button"; 
+import { useUI } from "../../../context/PlannerContext"; 
 
 const Sidebar = ({
   // Data
@@ -23,7 +21,6 @@ const Sidebar = ({
   showCompleted,
   setShowCompleted,
   hideOverdue,
-  setHideOverdue, // Make sure this is passed from App.jsx if used
 
   // Drag & Drop
   draggedEventId,
@@ -32,7 +29,7 @@ const Sidebar = ({
   handleSidebarDrop,
 }) => {
   
-  const { mobileMenuOpen } = useUI(); // Consume context
+  const { mobileMenuOpen, setMobileMenuOpen } = useUI(); 
 
   // --- Grouping Logic ---
   const groupedTasks = useMemo(() => {
@@ -163,100 +160,116 @@ const Sidebar = ({
   );
 
   return (
-    <aside 
-      className={`
-        border-r border-divider bg-white dark:bg-slate-900 flex flex-col h-full shrink-0
-        transition-all duration-300 ease-in-out
-        
-        /* Mobile Styles */
-        absolute inset-0 z-20 w-full
-        ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
-        
-        /* Desktop Styles */
-        md:relative md:translate-x-0 md:w-80 md:block
-        
-        /* Ensure it hides properly when closed on mobile */
-        ${!mobileMenuOpen ? "hidden md:flex" : "flex"}
-      `}
-    >
-      {/* Search & Filter Header */}
-      <div className="p-4 border-b border-divider space-y-3">
-        <Input
-          placeholder="Search tasks..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="bg-slate-50 dark:bg-slate-800 border-none"
-        />
-        
-        <div className="flex gap-2">
-          <select
-            value={activeTypeFilter}
-            onChange={(e) => setActiveTypeFilter(e.target.value)}
-            className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-slate-50 dark:bg-slate-800 border-none text-secondary outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
-          >
-            <option value="All">All Types</option>
-            <option value="Homework">Homework</option>
-            <option value="Exam">Exam</option>
-            <option value="Project">Project</option>
-          </select>
+    <>
+      {/* Mobile Backdrop - Using FIXED to cover entire screen including header */}
+      <div 
+        className={`
+          fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 md:hidden
+          ${mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
+        `}
+        onClick={() => setMobileMenuOpen(false)}
+      />
 
-          <Button
-            onClick={() => setShowCompleted(!showCompleted)}
-            variant={showCompleted ? "ghost" : "secondary"}
-            className={`
-              !px-3 !py-1.5 
-              ${showCompleted 
-                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
-                : "text-slate-500"
-              }
-            `}
-          >
-            Done
-          </Button>
-        </div>
-      </div>
+      <aside 
+        className={`
+          border-r border-divider bg-white dark:bg-slate-900 flex flex-col h-full shrink-0
+          transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
+          
+          /* Mobile Styles: Fixed Full Height Drawer */
+          fixed inset-y-0 left-0 z-50 w-4/5 max-w-xs shadow-2xl
+          ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+          
+          /* Desktop Styles: Relative Column */
+          md:relative md:translate-x-0 md:w-80 md:shadow-none md:z-auto
+        `}
+      >
+        {/* Search & Filter Header */}
+        <div className="p-4 border-b border-divider space-y-3">
+          {/* Mobile Close Button Row */}
+          <div className="flex items-center justify-between md:hidden mb-2">
+            <h3 className="font-bold text-lg text-primary">Tasks</h3>
+            <Button variant="ghost" onClick={() => setMobileMenuOpen(false)} className="!p-1">
+              <X className="w-5 h-5 text-secondary" />
+            </Button>
+          </div>
 
-      {/* Task List */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
-        
-        {(!hideOverdue && groupedTasks.overdue.length > 0) && (
-          <DropZone 
-            title="Overdue" 
-            groupKey="overdue"
-            icon={AlertCircle} 
-            items={groupedTasks.overdue} 
-            isDanger 
+          <Input
+            placeholder="Search tasks..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-slate-50 dark:bg-slate-800 border-none"
           />
-        )}
+          
+          <div className="flex gap-2">
+            <select
+              value={activeTypeFilter}
+              onChange={(e) => setActiveTypeFilter(e.target.value)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-slate-50 dark:bg-slate-800 border-none text-secondary outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
+            >
+              <option value="All">All Types</option>
+              <option value="Homework">Homework</option>
+              <option value="Exam">Exam</option>
+              <option value="Project">Project</option>
+            </select>
 
-        <DropZone 
-          title="Today" 
-          groupKey="today" 
-          icon={Clock} 
-          items={groupedTasks.today} 
-        />
-
-        <DropZone 
-          title="Tomorrow" 
-          groupKey="tomorrow" 
-          icon={Calendar} 
-          items={groupedTasks.tomorrow} 
-        />
-
-        <div className="flex flex-col gap-2">
-           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-secondary px-1">
-              <Calendar className="w-4 h-4" />
-              Upcoming
-              <span className="bg-slate-100 dark:bg-slate-800 px-1.5 rounded-full text-[10px]">
-                {groupedTasks.upcoming.length}
-              </span>
-           </div>
-           <div className="flex flex-col gap-2">
-              {groupedTasks.upcoming.map(task => <TaskItem key={task.id} task={task} />)}
-           </div>
+            <Button
+              onClick={() => setShowCompleted(!showCompleted)}
+              variant={showCompleted ? "ghost" : "secondary"}
+              className={`
+                !px-3 !py-1.5 
+                ${showCompleted 
+                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+                  : "text-slate-500"
+                }
+              `}
+            >
+              Done
+            </Button>
+          </div>
         </div>
-      </div>
-    </aside>
+
+        {/* Task List */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+          
+          {(!hideOverdue && groupedTasks.overdue.length > 0) && (
+            <DropZone 
+              title="Overdue" 
+              groupKey="overdue"
+              icon={AlertCircle} 
+              items={groupedTasks.overdue} 
+              isDanger 
+            />
+          )}
+
+          <DropZone 
+            title="Today" 
+            groupKey="today" 
+            icon={Clock} 
+            items={groupedTasks.today} 
+          />
+
+          <DropZone 
+            title="Tomorrow" 
+            groupKey="tomorrow" 
+            icon={Calendar} 
+            items={groupedTasks.tomorrow} 
+          />
+
+          <div className="flex flex-col gap-2">
+             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-secondary px-1">
+                <Calendar className="w-4 h-4" />
+                Upcoming
+                <span className="bg-slate-100 dark:bg-slate-800 px-1.5 rounded-full text-[10px]">
+                  {groupedTasks.upcoming.length}
+                </span>
+             </div>
+             <div className="flex flex-col gap-2">
+                {groupedTasks.upcoming.map(task => <TaskItem key={task.id} task={task} />)}
+             </div>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 };
 

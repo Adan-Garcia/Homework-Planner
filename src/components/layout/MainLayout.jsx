@@ -9,8 +9,8 @@ import {
   Columns,
   Rows,
   AlignLeft,
-  Menu, // New Icon
-  X,    // New Icon
+  Menu,
+  X,
 } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import Button from "../ui/Button";
@@ -23,8 +23,8 @@ const MainLayout = ({ children }) => {
     setCalendarView,
     openModal,
     openTaskModal,
-    mobileMenuOpen,    // New
-    setMobileMenuOpen, // New
+    mobileMenuOpen,
+    setMobileMenuOpen,
   } = useUI();
 
   const viewOptions = [
@@ -35,7 +35,8 @@ const MainLayout = ({ children }) => {
   ];
 
   return (
-    <div className="h-screen flex flex-col surface-main text-primary font-sans overflow-hidden transition-colors duration-300">
+    // Changed h-screen to h-[100dvh] for better mobile browser support
+    <div className="h-[100dvh] flex flex-col surface-main text-primary font-sans overflow-hidden transition-colors duration-300">
       {/* Header */}
       <header className="h-16 border-b border-divider px-4 md:px-6 flex items-center justify-between surface-main shrink-0 z-30 relative">
         <div className="flex items-center gap-3">
@@ -55,8 +56,8 @@ const MainLayout = ({ children }) => {
           </h1>
         </div>
 
-        {/* View Switcher - Hidden on very small screens if needed, or scrollable */}
-        <div className="flex items-center surface-card rounded-lg p-1 overflow-x-auto max-w-[200px] md:max-w-none custom-scrollbar hide-scrollbar">
+        {/* View Switcher */}
+        <div className="flex items-center surface-card rounded-lg p-1 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
           {viewOptions.map((v) => (
             <Button
               key={v.id}
@@ -83,7 +84,7 @@ const MainLayout = ({ children }) => {
             variant="primary"
             onClick={() => openTaskModal(null)}
             icon={Plus}
-            className="!px-3 md:!px-4" // Smaller padding on mobile
+            className="!px-3 md:!px-4"
           >
             <span className="hidden md:inline">New</span>
           </Button>
@@ -110,7 +111,7 @@ const MainLayout = ({ children }) => {
         </div>
       </header>
 
-      {/* Main Content Grid - Added 'relative' for absolute positioning of mobile sidebar */}
+      {/* Main Content Grid */}
       <div className="flex flex-1 overflow-hidden relative">
         {children}
       </div>
