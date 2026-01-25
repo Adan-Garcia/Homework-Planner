@@ -27,20 +27,21 @@ const MainLayout = ({ children }) => {
     setMobileMenuOpen,
   } = useUI();
 
+  // Added 'hiddenOnMobile' property to the Day view
   const viewOptions = [
     { id: "month", icon: LayoutGrid, label: "Month" },
     { id: "week", icon: Columns, label: "Week" },
-    { id: "day", icon: Rows, label: "Day" },
+    { id: "day", icon: Rows, label: "Day", hiddenOnMobile: true }, 
     { id: "agenda", icon: AlignLeft, label: "Agenda" },
   ];
 
   return (
-    // Changed h-screen to h-[100dvh] for better mobile browser support
     <div className="h-[100dvh] flex flex-col surface-main text-primary font-sans overflow-hidden transition-colors duration-300">
       {/* Header */}
-      <header className="h-16 border-b border-divider px-4 md:px-6 flex items-center justify-between surface-main shrink-0 z-30 relative">
+      <header className="h-14 sm:h-16 border-b border-divider px-3 sm:px-6 flex items-center justify-between surface-main shrink-0 z-30 relative gap-2">
+        
+        {/* Left: Logo & Menu */}
         <div className="flex items-center gap-3">
-          {/* Mobile Menu Toggle */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-2 -ml-2 text-secondary hover:text-primary rounded-lg"
@@ -56,62 +57,58 @@ const MainLayout = ({ children }) => {
           </h1>
         </div>
 
-        {/* View Switcher */}
-        <div className="flex items-center surface-card rounded-lg p-1 overflow-x-auto max-w-[200px] md:max-w-none scrollbar-hide">
-          {viewOptions.map((v) => (
-            <Button
-              key={v.id}
-              onClick={() => setCalendarView(v.id)}
-              variant="ghost"
-              className={`
-                !px-2 md:!px-3 !py-1.5 gap-2 transition-all shrink-0
-                ${
-                  calendarView === v.id
-                    ? "surface-main shadow-sm text-link"
-                    : "text-secondary hover:text-primary"
-                }
-              `}
-            >
-              <v.icon className="icon-sm" />
-              <span className="hidden sm:inline">{v.label}</span>
-            </Button>
-          ))}
+        {/* Center: Mobile-Friendly Segmented View Switcher */}
+        <div className="flex-1 max-w-sm mx-auto">
+           <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-full">
+            {viewOptions.map((v) => (
+              <button
+                key={v.id}
+                onClick={() => setCalendarView(v.id)}
+                className={`
+                  flex-1 items-center justify-center py-1.5 rounded-md text-xs font-bold transition-all duration-200
+                  ${calendarView === v.id ? "segmented-item-active" : "segmented-item-inactive"}
+                  ${v.hiddenOnMobile ? "hidden md:flex" : "flex"} 
+                `}
+              >
+                <v.icon className="w-4 h-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">{v.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1 md:gap-2">
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button
             variant="primary"
             onClick={() => openTaskModal(null)}
             icon={Plus}
-            className="!px-3 md:!px-4"
+            className="!px-3 !py-1.5 sm:!py-2"
           >
-            <span className="hidden md:inline">New</span>
+            <span className="hidden sm:inline">New</span>
           </Button>
           
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-1">
             <Button
               variant="ghost"
               onClick={() => setDarkMode(!darkMode)}
-              className="p-2 text-secondary hover:bg-slate-100 dark:hover:bg-slate-700"
+              className="p-2 text-secondary"
             >
                {darkMode ? <Sun className="icon-sm" /> : <Moon className="icon-sm" />}
             </Button>
             
-            <div className="w-px h-5 border-l border-divider mx-2"></div>
+            <Button
+              variant="ghost"
+              onClick={() => openModal("settings")}
+              className="p-2 text-secondary"
+            >
+              <Settings className="icon-sm" />
+            </Button>
           </div>
-          
-          <Button
-            variant="ghost"
-            onClick={() => openModal("settings")}
-            className="p-2 text-secondary hover:bg-slate-100 dark:hover:bg-slate-700"
-          >
-            <Settings className="icon-sm" />
-          </Button>
         </div>
       </header>
 
-      {/* Main Content Grid */}
+      {/* Main Content */}
       <div className="flex flex-1 overflow-hidden relative">
         {children}
       </div>

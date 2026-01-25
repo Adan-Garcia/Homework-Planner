@@ -1,24 +1,25 @@
 @import "tailwindcss";
-
-/* --- Global App Styles for Mobile Feel --- */
+@theme {
+  /* Override the 'md' breakpoint to 900px */
+  --breakpoint-md: 900px;
+}
 @layer base {
   html, body, #root {
-    height: 100%;
+    height: 100dvh; /* Mobile viewport fix */
     width: 100%;
-    overflow: hidden; /* Prevent body scroll, handle inside containers */
-    overscroll-behavior: none; /* Prevent browser bounce/pull-to-refresh */
-    -webkit-tap-highlight-color: transparent; /* Remove tap highlight on buttons */
+    overflow: hidden;
+    overscroll-behavior: none; /* No pull-to-refresh bounce */
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
 @layer utilities {
-  /* Utility to hide scrollbars but keep functionality */
   .scrollbar-hide {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;     /* Firefox */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
   .scrollbar-hide::-webkit-scrollbar {
-    display: none;             /* Chrome, Safari and Opera */
+    display: none;
   }
 }
 
@@ -33,7 +34,12 @@
   .layout-editor-height {
     @apply h-[500px];
   }
-
+  .segmented-item-active {
+    @apply bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-slate-200 dark:ring-slate-600;
+  }
+  .segmented-item-inactive {
+    @apply text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200;
+  }
   /* Surface */
   .surface-main {
     @apply bg-white dark:bg-slate-900;

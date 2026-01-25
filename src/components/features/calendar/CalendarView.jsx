@@ -15,76 +15,29 @@ import {
   isSameMonth,
   isSameDay,
   isToday,
+  differenceInCalendarWeeks,
   parseISO,
-  isPast,
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Clock, Check, Flag } from "lucide-react";
-// Traversing up to 'src' (components/features/calendar -> ../../../) to be safe
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
-import { urlRegex } from "../../../utils/helpers";
-
-// --- Linkify Component ---
-const LinkifiedText = ({ text }) => {
-  if (!text) return null;
-  const parts = text.split(urlRegex);
-  return (
-    <span className="break-all">
-      {parts.map((part, i) =>
-        part.match(urlRegex) ? (
-          <a
-            key={i}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-500 hover:underline relative z-20"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {part}
-          </a>
-        ) : (
-          part
-        )
-      )}
-    </span>
-  );
-};
 
 const CalendarView = ({
-  // Data
   calendarView,
   filteredEvents,
   classColors,
-  
-  // Actions
   onEventClick,
   onDateClick,
-  
-  // Drag & Drop
   draggedEventId,
   handleDragStart,
   handleDragOver,
-  handleCalendarDrop,
+  handleDrop,
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // --- Navigation Logic ---
-  const navigate = (direction) => {
-    if (calendarView === "month") {
-      setCurrentDate(curr => direction === "next" ? addMonths(curr, 1) : subMonths(curr, 1));
-    } else if (calendarView === "week") {
-      setCurrentDate(curr => direction === "next" ? addWeeks(curr, 1) : subWeeks(curr, 1));
-    } else {
-      setCurrentDate(curr => direction === "next" ? addDays(curr, 1) : subDays(curr, 1));
-    }
-  };
-
-  const jumpToToday = () => setCurrentDate(new Date());
-
-  // --- Date Generation ---
-  const calendarDays = useMemo(() => {
+  // --- Date Logic ---
+  const { days, weeksCount } = useMemo(() => {
     let start, end;
-    
     if (calendarView === "month") {
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
@@ -94,17 +47,30 @@ const CalendarView = ({
       start = startOfWeek(currentDate);
       end = endOfWeek(currentDate);
     } else {
-      // Day
+      // Day view or Agenda
       start = currentDate;
       end = currentDate;
     }
 
-    return eachDayOfInterval({ start, end });
+    const days = eachDayOfInterval({ start, end });
+    const weeksCount = differenceInCalendarWeeks(end, start) + 1;
+    
+    return { days, weeksCount };
   }, [currentDate, calendarView]);
 
-  // --- Render Helpers ---
+  const navigate = (direction) => {
+    const isNext = direction === "next";
+    if (calendarView === "month") {
+      setCurrentDate((c) => (isNext ? addMonths(c, 1) : subMonths(c, 1)));
+    } else if (calendarView === "week") {
+      setCurrentDate((c) => (isNext ? addWeeks(c, 1) : subWeeks(c, 1)));
+    } else {
+      setCurrentDate((c) => (isNext ? addDays(c, 1) : subDays(c, 1)));
+    }
+  };
 
-  // 1. The Atomic Task Card
+  // --- Components ---
+
   const CalendarTaskCard = ({ task, isCompact = false }) => (
     <Card
       draggable={!task.completed}
@@ -114,279 +80,237 @@ const CalendarView = ({
         onEventClick(task);
       }}
       className={`
-        text-xs cursor-pointer overflow-hidden border-l-4 transition-all hover:scale-[1.02]
-        ${isCompact ? "p-1 mb-1" : "p-2 mb-2"}
+        text-xs cursor-pointer overflow-hidden border-l-4 transition-all hover:scale-[1.01] active:scale-95 shrink-0
+        ${isCompact ? "p-1 mb-1" : "p-3 mb-2"}
         ${task.completed ? "opacity-50 grayscale" : "shadow-sm"}
         ${draggedEventId === task.id ? "opacity-30" : ""}
       `}
       style={{ borderLeftColor: classColors[task.class] || "#cbd5e1" }}
     >
-      <div className="flex items-center gap-1.5 justify-between">
-        <div className="flex items-center gap-1.5 truncate">
-            {task.completed && <Check className="w-3 h-3 text-green-600 shrink-0" />}
-            <span className={`font-medium truncate ${task.completed ? "line-through text-slate-400" : ""}`}>
+      <div className="flex items-center gap-2 justify-between">
+        <div className="flex items-center gap-2 truncate">
+          {task.completed && <Check className="w-3 h-3 text-green-600 shrink-0" />}
+          <span className={`font-medium truncate ${task.completed ? "line-through text-slate-400" : ""}`}>
             {task.title}
-            </span>
+          </span>
         </div>
-        
-        {/* Priority Flag */}
         {task.priority === "High" && !task.completed && (
-            <Flag className="w-3 h-3 text-red-500 fill-red-500 shrink-0" />
+          <Flag className="w-3 h-3 text-red-500 fill-red-500 shrink-0" />
         )}
       </div>
-      {!isCompact && task.time && (
-        <div className="text-[10px] text-secondary mt-1 flex items-center gap-1">
-          <Clock className="w-3 h-3" /> {task.time}
+      {!isCompact && (
+        <div className="flex justify-between items-center mt-1">
+          <div className="flex gap-2">
+             <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-1 rounded text-secondary">{task.class}</span>
+             <span className="text-[10px] text-secondary">{task.type}</span>
+          </div>
+          {task.time && (
+            <div className="text-[10px] text-secondary flex items-center gap-1">
+              <Clock className="w-3 h-3" /> {task.time}
+            </div>
+          )}
         </div>
       )}
     </Card>
   );
 
-  // 2. Month Cell Component
-  const MonthCell = ({ day }) => {
-    const dayKey = format(day, "yyyy-MM-dd");
-    const dayEvents = filteredEvents.filter((e) => e.date === dayKey);
-    const isCurrentMonth = isSameMonth(day, currentDate);
-    const isDayToday = isToday(day);
+  // --- MOBILE VIEW RENDERER ---
+  const MobileView = () => {
+    const isMonthView = calendarView === 'month';
+    const activeDays = isMonthView 
+        ? eachDayOfInterval({ start: startOfWeek(startOfMonth(currentDate)), end: endOfWeek(endOfMonth(currentDate)) })
+        : eachDayOfInterval({ start: subDays(currentDate, 3), end: addDays(currentDate, 3) });
 
-    // Overflow Logic - Adjusted for mobile
-    const MAX_VISIBLE = 3;
-    const visibleEvents = dayEvents.slice(0, MAX_VISIBLE);
-    const hiddenCount = dayEvents.length - MAX_VISIBLE;
+    const selectedEvents = filteredEvents.filter(e => e.date === format(currentDate, "yyyy-MM-dd"));
 
     return (
-      <div
-        onDragOver={handleDragOver}
-        onDrop={(e) => handleCalendarDrop(e, dayKey)}
-        onClick={() => onDateClick && onDateClick(dayKey)}
-        className={`
-          min-h-[80px] sm:min-h-[100px] border-b border-r border-divider p-0.5 sm:p-1 transition-colors relative group flex flex-col
-          ${!isCurrentMonth ? "bg-slate-50/50 dark:bg-slate-900/30 text-secondary" : "bg-white dark:bg-slate-900"}
-          ${isDayToday ? "bg-blue-50/30 dark:bg-blue-900/10" : ""}
-          hover:bg-slate-50 dark:hover:bg-slate-800/50
-        `}
-      >
-        <div className="flex justify-between items-start p-0.5 mb-0.5">
-          <span
-            className={`
-              text-[10px] sm:text-xs font-semibold w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full
-              ${isDayToday ? "bg-blue-600 text-white" : "text-secondary"}
-            `}
-          >
-            {format(day, "d")}
-          </span>
-        </div>
-
-        <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
-          {/* Desktop/Tablet: Show cards */}
-          <div className="hidden sm:flex flex-col gap-0.5">
-            {visibleEvents.map((task) => (
-                <CalendarTaskCard key={task.id} task={task} isCompact={true} />
-            ))}
-          </div>
-          
-          {/* Mobile view: simple dots for events to save space */}
-          <div className="flex sm:hidden flex-wrap gap-1 content-start p-0.5">
-             {dayEvents.map(task => (
-                 <div 
-                    key={task.id} 
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }}
-                 />
-             ))}
-          </div>
-
-          {hiddenCount > 0 && (
-             <div className="hidden sm:block text-[10px] font-medium text-secondary text-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded mt-auto">
-                + {hiddenCount} more
-             </div>
-          )}
-        </div>
+      <div className="flex flex-col h-full w-full">
+         {/* Top Control Bar */}
+         <div className="bg-white dark:bg-slate-900 border-b border-divider shrink-0 p-2">
+            <div className="flex justify-between items-center mb-2 px-2">
+               <span className="font-bold text-lg">{format(currentDate, "MMMM yyyy")}</span>
+               <div className="flex gap-1">
+                   <Button variant="ghost" size="sm" onClick={() => navigate('prev')}><ChevronLeft className="w-4 h-4"/></Button>
+                   <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date())}>Today</Button>
+                   <Button variant="ghost" size="sm" onClick={() => navigate('next')}><ChevronRight className="w-4 h-4"/></Button>
+               </div>
+            </div>
+            {/* Scrollable Date Strip/Grid */}
+            <div className={`
+                ${isMonthView ? "grid grid-cols-7 gap-1" : "flex overflow-x-auto gap-2 snap-x scrollbar-hide"}
+            `}>
+                {/* FIX: Using index 'i' as key instead of 'd' to prevent duplicate key error for "S" and "T" */}
+                {isMonthView && ["S","M","T","W","T","F","S"].map((d, i) => (
+                    <div key={i} className="text-center text-[10px] text-secondary font-bold">{d}</div>
+                ))}
+                
+                {activeDays.map(day => {
+                   const isSel = isSameDay(day, currentDate);
+                   const hasEvent = filteredEvents.some(e => e.date === format(day, "yyyy-MM-dd"));
+                   
+                   if(isMonthView) {
+                       return (
+                           <button key={day.toString()} onClick={() => setCurrentDate(day)} className={`h-8 w-full rounded-full flex items-center justify-center text-xs relative ${isSel ? "bg-blue-600 text-white" : "text-primary"}`}>
+                               {format(day, "d")}
+                               {hasEvent && !isSel && <div className="absolute bottom-0.5 w-1 h-1 bg-blue-500 rounded-full" />}
+                           </button>
+                       )
+                   }
+                   
+                   return (
+                       <button key={day.toString()} onClick={() => setCurrentDate(day)} className={`snap-center min-w-[50px] flex flex-col items-center p-2 rounded-xl border ${isSel ? "bg-blue-600 text-white border-blue-600" : "bg-white dark:bg-slate-800 border-divider"}`}>
+                           <span className="text-[10px] font-bold uppercase">{format(day, "EEE")}</span>
+                           <span className="text-lg font-bold">{format(day, "d")}</span>
+                           {hasEvent && <div className={`w-1 h-1 rounded-full mt-1 ${isSel ? "bg-white" : "bg-blue-500"}`} />}
+                       </button>
+                   )
+                })}
+            </div>
+         </div>
+         {/* Task List */}
+         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-black p-4 space-y-2">
+             <h3 className="text-xs font-bold uppercase text-secondary mb-2">{format(currentDate, "EEEE, MMMM do")}</h3>
+             {selectedEvents.length > 0 ? (
+                 selectedEvents.map(t => <CalendarTaskCard key={t.id} task={t} />)
+             ) : (
+                 <div className="text-center py-10 text-secondary opacity-50 italic">No tasks</div>
+             )}
+         </div>
       </div>
     );
   };
 
-  // 3. Week Column Component
-  const WeekColumn = ({ day }) => {
-    const dayKey = format(day, "yyyy-MM-dd");
-    const dayEvents = filteredEvents.filter((e) => e.date === dayKey);
-    const isDayToday = isToday(day);
-
-    return (
-      <div 
-        className="flex-1 min-w-[120px] sm:min-w-[150px] border-r border-divider flex flex-col snap-center"
-        onDragOver={handleDragOver}
-        onDrop={(e) => handleCalendarDrop(e, dayKey)}
-      >
-        <div className={`p-2 border-b border-divider text-center sticky top-0 bg-inherit z-10 ${isDayToday ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}>
-          <div className="text-[10px] sm:text-xs uppercase text-secondary font-bold">{format(day, "EEE")}</div>
-          <div className={`text-lg sm:text-xl font-bold ${isDayToday ? "text-blue-600" : ""}`}>{format(day, "d")}</div>
-        </div>
-        
-        <div className="flex-1 p-1 sm:p-2 space-y-1 sm:space-y-2 bg-slate-50/30 dark:bg-slate-900/30">
-          {dayEvents.map((task) => (
-             <CalendarTaskCard key={task.id} task={task} />
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // 4. Agenda Group Component
-  const AgendaGroup = ({ dateStr, tasks }) => {
-     const dateObj = parseISO(dateStr);
-     const isDayToday = isToday(dateObj);
-     
-     return (
-        <div className="mb-6">
-           <div className={`sticky top-0 z-10 py-2 px-4 bg-slate-50 dark:bg-slate-800 border-y border-divider mb-3 flex items-baseline gap-2`}>
-              <span className={`text-base sm:text-lg font-bold ${isDayToday ? "text-blue-600" : "text-primary"}`}>
-                 {format(dateObj, "EEEE")}
-              </span>
-              <span className="text-xs sm:text-sm text-secondary">
-                 {format(dateObj, "MMMM do")}
-              </span>
-              {isDayToday && <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Today</span>}
-           </div>
-           
-           <div className="px-4 space-y-3">
-              {tasks.map(task => (
-                 <Card 
-                    key={task.id}
-                    onClick={() => onEventClick(task)}
-                    className="p-3 border-l-4 hover:shadow-md transition-shadow cursor-pointer"
-                    style={{ borderLeftColor: classColors[task.class] || "#cbd5e1" }}
-                 >
-                    <div className="flex items-start gap-3">
-                       <div className="w-14 sm:w-16 shrink-0 text-[10px] sm:text-xs text-secondary font-mono pt-0.5">
-                          {task.time || "All Day"}
-                       </div>
-                       <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                             <span className="font-bold text-sm text-primary">{task.title}</span>
-                             {task.priority === "High" && <Flag className="w-3 h-3 text-red-500 fill-red-500" />}
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px] text-secondary mb-2">
-                             <span className="bg-slate-100 dark:bg-slate-700 px-1.5 rounded">{task.class}</span>
-                             <span>{task.type}</span>
-                          </div>
-                          {task.description && (
-                             <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                                <LinkifiedText text={task.description} />
-                             </p>
-                          )}
-                       </div>
-                    </div>
-                 </Card>
-              ))}
-           </div>
-        </div>
-     );
-  };
-
-  // --- Main Render ---
   return (
-    <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900">
-      {/* 1. Header Navigation - Updated for Mobile Stacking */}
-      <header className="flex flex-col sm:flex-row items-center justify-between p-3 sm:p-4 border-b border-divider shrink-0 gap-3 sm:gap-0">
-        <h2 className="text-lg sm:text-xl font-bold text-primary truncate w-full sm:w-auto text-center sm:text-left">
-          {calendarView === "agenda" ? "Upcoming Agenda" : format(currentDate, "MMMM yyyy")}
-        </h2>
-        
-        {calendarView !== "agenda" && (
+    <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900 overflow-hidden">
+      
+      {/* MOBILE RENDERER */}
+      <div className="md:hidden h-full">
+         <MobileView />
+      </div>
+
+      {/* DESKTOP RENDERER */}
+      <div className="hidden md:flex flex-col h-full w-full">
+         {/* Desktop Header */}
+         <header className="flex items-center justify-between p-4 border-b border-divider shrink-0 bg-white dark:bg-slate-900 z-20">
+            <h2 className="text-xl font-bold text-primary">
+               {calendarView === "agenda" ? "Upcoming Agenda" : format(currentDate, "MMMM yyyy")}
+            </h2>
+            {calendarView !== "agenda" && (
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
-                <Button variant="ghost" onClick={() => navigate("prev")} className="!p-1">
-                <ChevronLeft className="w-5 h-5 text-secondary" />
-                </Button>
-                <Button variant="ghost" onClick={jumpToToday} className="text-xs font-bold px-2">
-                Today
-                </Button>
-                <Button variant="ghost" onClick={() => navigate("next")} className="!p-1">
-                <ChevronRight className="w-5 h-5 text-secondary" />
-                </Button>
+               <Button variant="ghost" onClick={() => navigate("prev")}><ChevronLeft className="w-5 h-5" /></Button>
+               <Button variant="ghost" onClick={() => setCurrentDate(new Date())} className="px-3 font-bold">Today</Button>
+               <Button variant="ghost" onClick={() => navigate("next")}><ChevronRight className="w-5 h-5" /></Button>
             </div>
-        )}
-      </header>
+            )}
+         </header>
 
-      {/* 2. Calendar Grid Body */}
-      <div className="flex-1 overflow-auto custom-scrollbar bg-slate-100 dark:bg-black">
-        
-        {/* Month View - Responsive Grid */}
-        {calendarView === "month" && (
-          <div className="grid grid-cols-7 min-h-full auto-rows-fr bg-divider gap-[1px] border-l border-divider w-full">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName) => (
-              <div key={dayName} className="p-1 sm:p-2 text-center text-[10px] sm:text-xs font-bold uppercase text-secondary bg-white dark:bg-slate-900 truncate">
-                {dayName}
-              </div>
-            ))}
-            {calendarDays.map((day) => (
-              <MonthCell key={day.toString()} day={day} />
-            ))}
-          </div>
-        )}
-
-        {/* Week View - Responsive Snap Scroll */}
-        {calendarView === "week" && (
-          <div className="flex h-full min-w-full bg-white dark:bg-slate-900 overflow-x-auto snap-x snap-mandatory">
-            {calendarDays.map((day) => (
-              <WeekColumn key={day.toString()} day={day} />
-            ))}
-          </div>
-        )}
-
-        {/* Day View - Adjusted Padding */}
-        {calendarView === "day" && (
-           <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
-              <div className="text-center mb-6">
-                <div className="text-3xl sm:text-4xl font-bold text-primary">{format(currentDate, "EEEE")}</div>
-                <div className="text-lg sm:text-xl text-secondary">{format(currentDate, "MMMM do, yyyy")}</div>
-              </div>
-              <div className="space-y-3">
-                {filteredEvents
-                  .filter(e => e.date === format(currentDate, "yyyy-MM-dd"))
-                  .map(task => (
-                    <CalendarTaskCard key={task.id} task={task} />
-                  ))}
-                 {filteredEvents.filter(e => e.date === format(currentDate, "yyyy-MM-dd")).length === 0 && (
-                   <div className="text-center p-10 text-secondary border-2 border-dashed border-divider rounded-xl">
-                     No tasks for this day
+         {/* Desktop Content Area */}
+         <div className="flex-1 overflow-hidden bg-slate-100 dark:bg-black relative">
+            
+            {/* --- Month View --- */}
+            {calendarView === "month" && (
+               <div className="flex flex-col h-full w-full">
+                   {/* Day Names Header */}
+                   <div className="grid grid-cols-7 border-b border-divider shrink-0">
+                       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName) => (
+                          <div key={dayName} className="py-2 text-center text-xs font-bold uppercase text-secondary bg-white dark:bg-slate-900">
+                             {dayName}
+                          </div>
+                       ))}
                    </div>
-                 )}
-              </div>
-           </div>
-        )}
+                   
+                   {/* The Grid */}
+                   <div 
+                      className="grid grid-cols-7 w-full h-full bg-divider gap-[1px] border-l border-divider"
+                      style={{ 
+                          gridTemplateRows: `repeat(${weeksCount}, minmax(0, 1fr))` 
+                      }}
+                   >
+                       {days.map((day) => {
+                          const dayKey = format(day, "yyyy-MM-dd");
+                          const dayEvents = filteredEvents.filter((e) => e.date === dayKey);
+                          const isCurrentMonth = isSameMonth(day, currentDate);
+                          
+                          return (
+                             <div
+                                key={dayKey}
+                                onDrop={(e) => handleDrop && handleDrop(e, dayKey)}
+                                onDragOver={handleDragOver}
+                                onClick={() => onDateClick && onDateClick(dayKey)}
+                                className={`
+                                   flex flex-col min-h-0 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors
+                                   ${!isCurrentMonth ? "bg-slate-50/50 dark:bg-slate-900/50" : ""}
+                                `}
+                             >
+                                {/* Date Number */}
+                                <div className="p-2 shrink-0 flex justify-between items-start">
+                                    <span className={`
+                                        text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full
+                                        ${isToday(day) ? "bg-blue-600 text-white" : isCurrentMonth ? "text-primary" : "text-secondary"}
+                                    `}>
+                                        {format(day, "d")}
+                                    </span>
+                                </div>
+                                
+                                {/* Scrollable Event Area */}
+                                <div className="flex-1 overflow-y-auto px-1 pb-1 space-y-1 scrollbar-hide">
+                                    {dayEvents.map((task) => (
+                                       <CalendarTaskCard key={task.id} task={task} isCompact />
+                                    ))}
+                                </div>
+                             </div>
+                          );
+                       })}
+                   </div>
+               </div>
+            )}
 
-        {/* Agenda View */}
-        {calendarView === "agenda" && (
-            <div className="max-w-4xl mx-auto pb-10 sm:px-4">
-                {(() => {
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    const groups = {};
-                    
-                    filteredEvents.forEach(task => {
-                        if (task.date >= todayStr && !task.completed) {
-                            if (!groups[task.date]) groups[task.date] = [];
-                            groups[task.date].push(task);
-                        }
-                    });
-
-                    const sortedDates = Object.keys(groups).sort();
-
-                    if (sortedDates.length === 0) {
-                        return (
-                            <div className="p-10 text-center text-secondary">
-                                <div className="text-lg font-bold">No upcoming tasks</div>
-                                <p className="text-sm">You're all caught up!</p>
-                            </div>
-                        );
-                    }
-
-                    return sortedDates.map(date => (
-                        <AgendaGroup key={date} dateStr={date} tasks={groups[date]} />
-                    ));
-                })()}
-            </div>
-        )}
+            {/* --- Week View --- */}
+            {calendarView === "week" && (
+               <div className="flex h-full min-w-full bg-white dark:bg-slate-900 overflow-hidden">
+               {days.map((day) => (
+                  <div key={day.toString()} className="flex-1 min-w-[100px] border-r border-divider flex flex-col h-full min-h-0">
+                     <div className={`p-3 border-b border-divider text-center shrink-0 ${isToday(day) ? "text-blue-600" : ""}`}>
+                         <div className="text-xs font-bold uppercase">{format(day, "EEE")}</div>
+                         <div className="text-2xl font-bold">{format(day, "d")}</div>
+                     </div>
+                     <div className="flex-1 p-2 space-y-2 bg-slate-50/30 dark:bg-slate-900/30 overflow-y-auto custom-scrollbar">
+                         {filteredEvents.filter(e => e.date === format(day, "yyyy-MM-dd")).map(task => (
+                            <CalendarTaskCard key={task.id} task={task} />
+                         ))}
+                     </div>
+                  </div>
+               ))}
+               </div>
+            )}
+            
+            {/* --- Day/Agenda View --- */}
+            {(calendarView === "agenda" || calendarView === "day") && (
+               <div className="h-full overflow-y-auto p-8">
+                  <div className="max-w-3xl mx-auto">
+                      <h2 className="text-2xl font-bold mb-6 border-b pb-2">
+                         {calendarView === 'day' ? format(currentDate, "EEEE, MMMM do") : "Agenda"}
+                      </h2>
+                      <div className="space-y-4 pb-20">
+                         {filteredEvents
+                            .filter(e => calendarView === 'day' ? e.date === format(currentDate, "yyyy-MM-dd") : true)
+                            .map(task => (
+                               <div key={task.id} className="flex gap-4 items-start group">
+                                  <div className="w-24 text-xs text-secondary text-right pt-2 font-mono">
+                                     {format(parseISO(task.date), "MMM d")}
+                                     <div className="font-bold">{task.time || "All Day"}</div>
+                                  </div>
+                                  <div className="flex-1">
+                                     <CalendarTaskCard task={task} />
+                                  </div>
+                               </div>
+                            ))
+                         }
+                      </div>
+                  </div>
+               </div>
+            )}
+         </div>
       </div>
     </div>
   );
