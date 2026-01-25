@@ -61,7 +61,7 @@ const SyncRoomContent = () => {
       ) : (
         <div className="space-y-3">
           <p className="text-[10px] text-center leading-relaxed text-secondary">
-            You are currently working offline. To create or join a multiplayer
+            You are currently working offline. To create or join a sync
             room, please return to the setup screen.
           </p>
           <button

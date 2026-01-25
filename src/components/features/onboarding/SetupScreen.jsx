@@ -12,11 +12,11 @@ import {
   Smartphone,
   Lock,
   ChevronRight,
+  ArrowRight,
 } from "lucide-react";
 import { useUI } from "../../../context/PlannerContext";
 import { useData } from "../../../context/DataContext";
 import { useAuth } from "../../../context/AuthContext";
-import Card from "../../ui/Card";
 
 const SetupScreen = () => {
   const { processICSContent, setEvents } = useData();
@@ -49,38 +49,27 @@ const SetupScreen = () => {
 
     try {
       let text;
-      
-      // Strategy: Try robust proxy first, fallback to legacy if needed
       try {
-        // Primary: corsproxy.io
-        // It handles redirects and tokens much better than allorigins
         const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("Primary proxy refused");
         text = await response.text();
       } catch (err) {
-        console.warn("Primary proxy failed, attempting fallback...", err);
-        
-        // Fallback: allorigins.win
         const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("All proxies failed");
         text = await response.text();
       }
 
-      // Validate that we actually got ICS content (basic check)
       if (!text.includes("BEGIN:VCALENDAR")) {
         throw new Error("The URL returned data, but it doesn't look like a calendar file.");
       }
 
       const result = processICSContent(text);
-      if (result.success) {
-        setView("planner");
-      } else {
-        setError(result.error);
-      }
+      if (result.success) setView("planner");
+      else setError(result.error);
 
     } catch (err) {
       console.error(err);
-      setError("Unable to access this calendar. Please download the .ics file manually and upload it instead.");
+      setError("Unable to access this calendar. Try downloading the .ics file manually.");
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +78,7 @@ const SetupScreen = () => {
   const handleConnect = (e) => {
     e.preventDefault();
     if (!roomInput.trim() || !passwordInput.trim()) {
-      setError("Room Code and Password are required to sync.");
+      setError("Room Code and Password are required.");
       return;
     }
     setRoomPassword(passwordInput);
@@ -100,7 +89,7 @@ const SetupScreen = () => {
   const handleCreateNew = (e) => {
     e.preventDefault();
     if (!passwordInput.trim()) {
-      setError("Please set a password for your new sync room.");
+      setError("Please set a password.");
       return;
     }
     const newCode = roomInput.trim() || Math.random().toString(36).substring(7).toUpperCase();
@@ -115,67 +104,67 @@ const SetupScreen = () => {
   };
 
   return (
-    // FIXED: Changed min-h-screen to h-screen and added overflow-y-auto
-    // This forces the scrollbar to appear on this element specifically
-    <div className="h-screen w-full overflow-y-auto bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
+    <div className="h-screen w-full overflow-y-auto bg-[#F2F2F7] dark:bg-black transition-colors duration-500 relative font-sans selection:bg-blue-500/30">
       
-      {/* Container ensures content is centered but allows scrolling if it overflows */}
-      <div className="min-h-full flex flex-col items-center justify-center p-4 py-12 relative">
+      {/* Ambient Background */}
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+         <div className="absolute top-[-10%] left-[20%] w-[70%] h-[70%] bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
+         <div className="absolute bottom-[-10%] right-[20%] w-[60%] h-[60%] bg-purple-400/20 dark:bg-purple-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
+      </div>
+
+      <div className="min-h-full flex flex-col items-center justify-center p-4 py-12 relative z-10">
         
-        <div className="absolute top-4 right-4 z-10">
+        {/* Theme Toggle */}
+        <div className="absolute top-6 right-6">
           <button
-            onClick={() => setDarkMode(prev => !prev)} // Use functional update
-            className="p-2 rounded-full bg-white dark:bg-slate-800 shadow-sm hover:shadow-md transition-all text-slate-600 dark:text-slate-300"
+            onClick={() => setDarkMode(prev => !prev)}
+            className="p-3 rounded-full mac-glass hover:scale-110 transition-transform active:scale-95 text-secondary hover:text-primary"
           >
-            {darkMode ? (
-              <Sun className="w-5 h-5" />
-            ) : (
-              <Moon className="w-5 h-5" />
-            )}
+            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
         </div>
 
-        {/* 'my-auto' helps center vertically when possible, but flows naturally when scrolling */}
-        <div className="max-w-5xl w-full my-auto">
-          <header className="text-center mb-12">
-            <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-600/20">
-              <CalendarIcon className="w-8 h-8 text-white" />
+        {/* Content Container */}
+        <div className="max-w-5xl w-full my-auto flex flex-col items-center">
+          
+          <header className="text-center mb-16 animate-in slide-in-from-bottom-8 duration-700 fade-in">
+            <div className="bg-gradient-to-br from-[#007AFF] to-[#5856D6] w-20 h-20 rounded-[22px] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-500/30 ring-4 ring-white/20 dark:ring-white/10">
+              <CalendarIcon className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-4xl font-bold text-slate-800 dark:text-white mb-3 tracking-tight">
+            <h1 className="text-5xl font-bold text-primary mb-4 tracking-tight">
               Homework Planner
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-lg max-w-lg mx-auto leading-relaxed">
+            <p className="text-secondary text-xl max-w-lg mx-auto leading-relaxed opacity-80">
               Your personal schedule, encrypted and synced across all your devices.
             </p>
           </header>
 
           {(error || authError) && (
-            <div className="mb-8 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-xl flex items-center gap-3 border border-red-200 dark:border-red-800 animate-in fade-in slide-in-from-top-2">
+            <div className="mb-8 mac-glass bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-2xl flex items-center gap-3 w-full max-w-md animate-in slide-in-from-top-4 fade-in">
               <AlertCircle className="w-5 h-5 shrink-0" />
-              <p className="text-sm font-medium">{error || authError}</p>
+              <p className="text-sm font-bold">{error || authError}</p>
             </div>
           )}
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Path 1: Syncing */}
-            <Card className="p-6 flex flex-col h-full border-2 border-blue-100 dark:border-blue-900/30">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-slate-800 dark:text-white">Sync Devices</h3>
+          <div className="grid lg:grid-cols-3 gap-6 w-full animate-in slide-in-from-bottom-12 duration-1000 fade-in fill-mode-backwards" style={{ animationDelay: '100ms' }}>
+            
+            {/* Card 1: Sync */}
+            <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
+              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-[#007AFF] mb-6">
+                <Smartphone className="w-6 h-6" />
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-                Connect this device to an existing room or create a new private sync bridge.
+              <h3 className="font-bold text-xl text-primary mb-2">Sync Devices</h3>
+              <p className="text-sm text-secondary mb-8 leading-relaxed">
+                Connect to an existing room or create a private sync bridge.
               </p>
               
-              <form className="space-y-3 mt-auto">
+              <form className="space-y-4 mt-auto">
                 <input
                   type="text"
                   placeholder="ROOM CODE"
                   value={roomInput}
                   onChange={(e) => setRoomInput(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white uppercase outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-4 py-3 text-sm mac-input-glass rounded-xl text-primary font-bold uppercase placeholder:font-normal placeholder:text-secondary/50 outline-none focus:ring-2 focus:ring-[#007AFF]/50"
                 />
                 <div className="relative">
                   <input
@@ -183,109 +172,109 @@ const SetupScreen = () => {
                     placeholder="Secret Password"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full px-3 py-2 pl-8 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-4 py-3 pl-10 text-sm mac-input-glass rounded-xl text-primary placeholder:text-secondary/50 outline-none focus:ring-2 focus:ring-[#007AFF]/50"
                   />
-                  <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <Lock className="w-4 h-4 text-secondary/50 absolute left-3.5 top-3.5" />
                 </div>
-                <div className="grid grid-cols-2 gap-2 pt-2">
+                <div className="grid grid-cols-2 gap-3 pt-2">
                   <button
                     type="submit"
                     onClick={handleConnect}
-                    className="bg-blue-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+                    className="bg-[#007AFF] text-white py-3 rounded-xl text-sm font-bold hover:bg-[#0062CC] shadow-lg shadow-blue-500/30 transition-all active:scale-95"
                   >
                     Connect
                   </button>
                   <button
                     type="submit"
                     onClick={handleCreateNew}
-                    className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    className="bg-black/5 dark:bg-white/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-black/10 dark:hover:bg-white/20 transition-all active:scale-95"
                   >
                     New Room
                   </button>
                 </div>
               </form>
-            </Card>
+            </div>
 
-            {/* Path 2: Importing */}
-            <Card className="p-6 flex flex-col h-full">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
-                  <Upload className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-slate-800 dark:text-white">Import Data</h3>
+            {/* Card 2: Import */}
+            <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 mb-6">
+                <Upload className="w-6 h-6" />
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-                Bring your schedule from Canvas, Google Calendar, or a backup file.
+              <h3 className="font-bold text-xl text-primary mb-2">Import Data</h3>
+              <p className="text-sm text-secondary mb-8 leading-relaxed">
+                Import from Canvas, Google Calendar, or a backup file.
               </p>
 
-              <div className="space-y-4 mt-auto">
-                <label className="block w-full">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 mb-1 block">Upload .ics file</span>
+              <div className="space-y-6 mt-auto">
+                <label className="block w-full group cursor-pointer">
+                  <span className="text-xs font-bold uppercase text-secondary/70 mb-2 block tracking-wider">Upload .ics file</span>
+                  <div className="mac-input-glass rounded-xl p-3 flex items-center justify-between group-hover:bg-white/50 dark:group-hover:bg-white/20 transition-colors">
+                     <span className="text-xs text-secondary italic pl-1">Select file...</span>
+                     <Upload className="w-4 h-4 text-purple-500" />
+                  </div>
                   <input
                     type="file"
                     accept=".ics"
                     onChange={handleFileUpload}
-                    className="block w-full text-[10px] text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 dark:file:bg-purple-900/30 dark:file:text-purple-400 cursor-pointer"
+                    className="hidden"
                   />
                 </label>
 
-                <div className="pt-2">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 mb-1 block">Fetch from URL</span>
-                  <div className="flex gap-1">
+                <div>
+                  <span className="text-xs font-bold uppercase text-secondary/70 mb-2 block tracking-wider">Fetch from URL</span>
+                  <div className="flex gap-2">
                     <input
                       type="text"
                       placeholder="https://..."
                       value={urlInput}
                       onChange={(e) => setUrlInput(e.target.value)}
-                      className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-purple-500/20 dark:text-white"
+                      className="flex-1 mac-input-glass rounded-xl px-4 py-2 text-sm text-primary outline-none focus:ring-2 focus:ring-purple-500/50"
                     />
                     <button
                       onClick={handleUrlFetch}
                       disabled={isLoading || !urlInput}
-                      className="bg-purple-600 text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                      className="bg-purple-600 text-white w-10 flex items-center justify-center rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-purple-500/30"
                     >
-                      {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
               </div>
-            </Card>
+            </div>
 
-            {/* Path 3: Starting Fresh */}
-            <Card className="p-6 flex flex-col h-full bg-slate-100/50 dark:bg-slate-800/20 border-dashed border-2 border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-slate-200 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-400">
-                  <Plus className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-slate-800 dark:text-white">Start Fresh</h3>
+            {/* Card 3: Fresh */}
+            <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300 border-dashed border-2 !border-black/5 dark:!border-white/10">
+              <div className="w-12 h-12 rounded-2xl bg-slate-500/10 flex items-center justify-center text-slate-500 mb-6">
+                <Plus className="w-6 h-6" />
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-                Begin with a clean slate and add your tasks manually one by one.
+              <h3 className="font-bold text-xl text-primary mb-2">Start Fresh</h3>
+              <p className="text-sm text-secondary mb-8 leading-relaxed">
+                Begin with a clean slate and add your tasks manually.
               </p>
 
-              <div className="space-y-2 mt-auto">
+              <div className="space-y-3 mt-auto">
                 <button
                   onClick={startEmpty}
-                  className="w-full flex items-center justify-between p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all group"
+                  className="w-full flex items-center justify-between p-4 rounded-xl mac-input-glass hover:bg-white/60 dark:hover:bg-white/20 transition-all group border border-transparent hover:border-blue-500/30"
                 >
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Start Empty</span>
-                  <Plus className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                  <span className="text-sm font-bold text-primary">Start Empty</span>
+                  <Plus className="w-4 h-4 text-secondary group-hover:text-blue-500 transition-colors" />
                 </button>
 
                 <button
                   onClick={() => openModal("jsonEdit")}
-                  className="w-full flex items-center justify-between p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all group"
+                  className="w-full flex items-center justify-between p-4 rounded-xl mac-input-glass hover:bg-white/60 dark:hover:bg-white/20 transition-all group border border-transparent hover:border-blue-500/30"
                 >
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Paste Raw JSON</span>
-                  <FileText className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                  <span className="text-sm font-bold text-primary">Paste Raw JSON</span>
+                  <FileText className="w-4 h-4 text-secondary group-hover:text-blue-500 transition-colors" />
                 </button>
               </div>
-            </Card>
+            </div>
           </div>
 
-          <footer className="mt-12 text-center">
-            <p className="text-[10px] text-slate-400 flex items-center justify-center gap-1">
-              <Lock className="w-3 h-3" /> Secure Zero-Knowledge Architecture. No data is stored unencrypted.
+          <footer className="mt-16 text-center opacity-60">
+            <p className="text-[10px] uppercase tracking-widest text-secondary flex items-center justify-center gap-2">
+              <Lock className="w-3 h-3" /> Zero-Knowledge Architecture
             </p>
           </footer>
         </div>

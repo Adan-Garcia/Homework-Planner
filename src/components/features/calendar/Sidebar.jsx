@@ -1,19 +1,15 @@
 import React, { useMemo } from "react";
-import { Check, Clock, Calendar, AlertCircle, GripVertical, X } from "lucide-react";
+import { Check, Clock, Calendar, AlertCircle, GripVertical, X, Filter, Circle } from "lucide-react";
 import { isToday, isTomorrow, isPast, parseISO } from "date-fns";
-import Card from "../../ui/Card";
 import Input from "../../ui/Input";
 import Button from "../../ui/Button"; 
 import { useUI } from "../../../context/PlannerContext"; 
 
 const Sidebar = ({
-  // Data
   filteredEvents,
   classColors,
   toggleTask,
   openEditTaskModal,
-
-  // Filters
   searchQuery,
   setSearchQuery,
   activeTypeFilter,
@@ -21,8 +17,6 @@ const Sidebar = ({
   showCompleted,
   setShowCompleted,
   hideOverdue,
-
-  // Drag & Drop
   draggedEventId,
   handleDragStart,
   handleDragOver,
@@ -31,14 +25,8 @@ const Sidebar = ({
   
   const { mobileMenuOpen, setMobileMenuOpen } = useUI(); 
 
-  // --- Grouping Logic ---
   const groupedTasks = useMemo(() => {
-    const groups = {
-      overdue: [],
-      today: [],
-      tomorrow: [],
-      upcoming: [],
-    };
+    const groups = { overdue: [], today: [], tomorrow: [], upcoming: [] };
     filteredEvents.forEach((task) => {
       if (!task.date) return;
       const taskDate = parseISO(task.date);
@@ -56,102 +44,100 @@ const Sidebar = ({
     return groups;
   }, [filteredEvents, showCompleted]);
 
-  // --- Render Helpers ---
+  // --- Task Item Component ---
   const TaskItem = ({ task }) => (
-    <Card
-      hoverable={!task.completed}
+    <div
       draggable={!task.completed}
       onDragStart={(e) => handleDragStart(e, task.id)}
       onClick={() => openEditTaskModal(task)}
       className={`
-        relative flex items-start gap-3 p-3 transition-all cursor-pointer group
-        ${
-          task.completed
-            ? "bg-slate-50 border-transparent opacity-60"
-            : "hover:border-blue-300 dark:hover:border-blue-700"
+        group relative flex items-start gap-3 p-3 rounded-2xl transition-all duration-300 cursor-pointer border
+        ${task.completed 
+            ? "opacity-50 bg-black/5 dark:bg-white/5 border-transparent blur-[0.5px]" 
+            : "bg-white/60 dark:bg-white/5 border-white/40 dark:border-white/5 shadow-sm hover:shadow-md hover:bg-white/90 dark:hover:bg-white/10 hover:-translate-y-0.5"
         }
-        ${draggedEventId === task.id ? "opacity-40 ring-2 ring-blue-400" : ""}
+        ${draggedEventId === task.id ? "opacity-30 ring-2 ring-blue-400 rotate-2 scale-95" : ""}
       `}
     >
+      {/* Checkbox */}
       <button
-        onClick={(e) => toggleTask(e, task.id)}
+        onClick={(e) => {
+             e.stopPropagation();
+             toggleTask(e, task.id);
+        }}
         className={`
-          mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0
-          ${
-            task.completed
-              ? "bg-blue-500 border-blue-500 text-white"
-              : "border-slate-300 dark:border-slate-500 hover:border-blue-400"
+          mt-0.5 w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 shrink-0
+          ${task.completed
+              ? "bg-[#34C759] border-[#34C759] text-white scale-100 rotate-0"
+              : "border-slate-300 dark:border-slate-500 hover:border-[#34C759] text-transparent scale-95 group-hover:scale-100"
           }
         `}
       >
-        {task.completed && <Check className="w-3.5 h-3.5" />}
+        <Check className="w-3 h-3 stroke-[4]" />
       </button>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }}
-          />
-          <span
-            className={`text-xs font-bold truncate ${
-              task.completed ? "text-slate-400 line-through" : "text-primary"
-            }`}
-          >
-            {task.class}
-          </span>
-          {task.time && (
-            <span className="text-[10px] text-secondary ml-auto flex items-center gap-1">
-              <Clock className="w-3 h-3" />
+      {/* Content */}
+      <div className="flex-1 min-w-0 py-0.5">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+           <div className="flex items-center gap-1.5 min-w-0">
+                <span className="w-2 h-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }} />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-secondary truncate opacity-80">
+                    {task.class}
+                </span>
+           </div>
+           {task.time && (
+            <span className="text-[10px] font-medium text-secondary flex items-center gap-1 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
               {task.time}
             </span>
-          )}
+           )}
         </div>
         
-        <p className={`text-sm leading-tight mb-1 ${task.completed ? "text-secondary line-through" : "text-primary"}`}>
+        <p className={`text-sm font-medium leading-snug transition-colors ${task.completed ? "text-secondary line-through" : "text-primary"}`}>
           {task.title}
         </p>
         
-        <div className="flex items-center gap-2 text-[10px] text-secondary">
-           <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700/50">
+        <div className="flex items-center gap-2 mt-2">
+           <span className="text-[10px] text-secondary font-medium px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
              {task.type}
            </span>
-           {task.priority === "High" && (
-             <span className="text-red-500 font-medium">High Priority</span>
+           {task.priority === "High" && !task.completed && (
+             <span className="text-[10px] text-red-600 bg-red-100/50 dark:bg-red-500/20 px-2 py-0.5 rounded-full font-bold">
+                High
+             </span>
            )}
         </div>
       </div>
       
       {!task.completed && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-400 cursor-grab active:cursor-grabbing md:block hidden">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-300 cursor-grab active:cursor-grabbing md:block hidden p-2">
           <GripVertical className="w-4 h-4" />
         </div>
       )}
-    </Card>
+    </div>
   );
 
-  const DropZone = ({ title, groupKey, icon: Icon, items, isDanger }) => (
+  const DropZone = ({ title, groupKey, icon: Icon, items, isDanger, accentColor = "text-slate-500" }) => (
     <div
       onDragOver={handleDragOver}
       onDrop={(e) => handleSidebarDrop(e, groupKey)}
-      className="flex flex-col gap-2"
+      className="flex flex-col gap-3"
     >
-      <div className={`flex items-center justify-between px-1 ${isDanger ? "text-red-500" : "text-secondary"}`}>
+      <div className={`flex items-center justify-between px-2 ${isDanger ? "text-red-500" : "text-secondary"}`}>
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-          <Icon className="w-4 h-4" />
+          <Icon className={`w-4 h-4 ${isDanger ? "text-red-500" : accentColor}`} />
           {title}
-          <span className="bg-slate-100 dark:bg-slate-800 px-1.5 rounded-full text-[10px]">
-            {items.length}
-          </span>
         </div>
+        <span className="bg-black/5 dark:bg-white/10 text-secondary px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+            {items.length}
+        </span>
       </div>
       
-      <div className={`flex flex-col gap-2 min-h-[50px] rounded-xl transition-colors ${draggedEventId ? "bg-slate-50/50 dark:bg-slate-800/30 border-2 border-dashed border-slate-200 dark:border-slate-700" : ""}`}>
+      <div className={`flex flex-col gap-3 min-h-[20px] transition-all rounded-3xl ${draggedEventId ? "p-3 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-dashed border-blue-200 dark:border-blue-800" : ""}`}>
         {items.map((task) => (
           <TaskItem key={task.id} task={task} />
         ))}
         {items.length === 0 && (
-          <div className="flex items-center justify-center h-full py-4 text-xs text-muted italic">
+          <div className="text-center py-6 text-xs text-slate-300 dark:text-slate-600 italic">
             No tasks
           </div>
         )}
@@ -161,75 +147,74 @@ const Sidebar = ({
 
   return (
     <>
-      {/* Mobile Backdrop - Using FIXED to cover entire screen including header */}
+      {/* Mobile Backdrop */}
       <div 
-        className={`
-          fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 md:hidden
-          ${mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
-        `}
+        className={`fixed inset-0 z-[40] bg-black/30 backdrop-blur-md transition-opacity duration-500 md:hidden ${mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
         onClick={() => setMobileMenuOpen(false)}
       />
 
       <aside 
         className={`
-          border-r border-divider bg-white dark:bg-slate-900 flex flex-col h-full shrink-0
-          transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
+          /* Card Style for both Desktop and Mobile */
+          mac-glass flex flex-col shrink-0 overflow-hidden
+          transition-transform duration-500 cubic-bezier(0.32, 0.72, 0, 1)
           
-          /* Mobile Styles: Fixed Full Height Drawer */
-          fixed inset-y-0 left-0 z-50 w-4/5 max-w-xs shadow-2xl
-          ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+          /* Mobile: Drawer - Starts BELOW Header (top-20) */
+          fixed top-20 bottom-4 left-4 z-[50] w-[calc(100%-2rem)] max-w-xs rounded-[32px] shadow-2xl md:shadow-none
+          ${mobileMenuOpen ? "translate-x-0" : "-translate-x-[150%]"}
           
-          /* Desktop Styles: Relative Column */
-          md:relative md:translate-x-0 md:w-80 md:shadow-none md:z-auto
+          /* Desktop: Floating Panel */
+          md:relative md:inset-auto md:translate-x-0 md:w-80 md:h-full md:rounded-[32px]
         `}
       >
-        {/* Search & Filter Header */}
-        <div className="p-4 border-b border-divider space-y-3">
-          {/* Mobile Close Button Row */}
-          <div className="flex items-center justify-between md:hidden mb-2">
+        {/* Header */}
+        <div className="p-5 pb-2 space-y-4 bg-white/40 dark:bg-black/20 backdrop-blur-md z-10">
+          <div className="flex items-center justify-between md:hidden">
             <h3 className="font-bold text-lg text-primary">Tasks</h3>
-            <Button variant="ghost" onClick={() => setMobileMenuOpen(false)} className="!p-1">
-              <X className="w-5 h-5 text-secondary" />
+            <Button variant="ghost" onClick={() => setMobileMenuOpen(false)} className="!p-1 rounded-full">
+              <X className="w-5 h-5" />
             </Button>
           </div>
 
-          <Input
-            placeholder="Search tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-slate-50 dark:bg-slate-800 border-none"
-          />
+          <div className="relative">
+             <Input
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="mac-input-glass !rounded-xl !pl-9"
+             />
+             <Filter className="absolute left-3 top-3 w-4 h-4 text-secondary opacity-50" />
+          </div>
           
           <div className="flex gap-2">
-            <select
-              value={activeTypeFilter}
-              onChange={(e) => setActiveTypeFilter(e.target.value)}
-              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-slate-50 dark:bg-slate-800 border-none text-secondary outline-none cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700"
-            >
-              <option value="All">All Types</option>
-              <option value="Homework">Homework</option>
-              <option value="Exam">Exam</option>
-              <option value="Project">Project</option>
-            </select>
+            <div className="relative flex-1 group">
+                <select
+                value={activeTypeFilter}
+                onChange={(e) => setActiveTypeFilter(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 rounded-xl text-xs font-medium mac-input-glass text-secondary outline-none cursor-pointer appearance-none transition-all group-hover:bg-white/60 dark:group-hover:bg-white/20"
+                >
+                <option value="All">All Types</option>
+                <option value="Homework">Homework</option>
+                <option value="Exam">Exam</option>
+                <option value="Project">Project</option>
+                </select>
+                <div className="absolute right-3 top-2.5 pointer-events-none">
+                    <Circle className="w-3 h-3 fill-current text-secondary opacity-50" />
+                </div>
+            </div>
 
             <Button
               onClick={() => setShowCompleted(!showCompleted)}
-              variant={showCompleted ? "ghost" : "secondary"}
-              className={`
-                !px-3 !py-1.5 
-                ${showCompleted 
-                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
-                  : "text-slate-500"
-                }
-              `}
+              variant="ghost"
+              className={`!px-4 !py-1.5 border border-transparent !rounded-xl ${showCompleted ? "bg-[#34C759]/10 text-[#34C759]" : "text-secondary bg-black/5 dark:bg-white/5"}`}
             >
               Done
             </Button>
           </div>
         </div>
 
-        {/* Task List */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+        {/* Task List Container */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-8 pb-32 mask-gradient-b">
           
           {(!hideOverdue && groupedTasks.overdue.length > 0) && (
             <DropZone 
@@ -246,27 +231,23 @@ const Sidebar = ({
             groupKey="today" 
             icon={Clock} 
             items={groupedTasks.today} 
+            accentColor="text-blue-500"
           />
 
           <DropZone 
             title="Tomorrow" 
             groupKey="tomorrow" 
             icon={Calendar} 
-            items={groupedTasks.tomorrow} 
+            items={groupedTasks.tomorrow}
+            accentColor="text-purple-500" 
           />
 
-          <div className="flex flex-col gap-2">
-             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-secondary px-1">
-                <Calendar className="w-4 h-4" />
-                Upcoming
-                <span className="bg-slate-100 dark:bg-slate-800 px-1.5 rounded-full text-[10px]">
-                  {groupedTasks.upcoming.length}
-                </span>
-             </div>
-             <div className="flex flex-col gap-2">
-                {groupedTasks.upcoming.map(task => <TaskItem key={task.id} task={task} />)}
-             </div>
-          </div>
+          <DropZone 
+            title="Upcoming"
+            groupKey="upcoming"
+            icon={Calendar}
+            items={groupedTasks.upcoming}
+          />
         </div>
       </aside>
     </>

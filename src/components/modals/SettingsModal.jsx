@@ -1,15 +1,13 @@
 import React, { useState } from "react";
-import { BookOpen, Database, RefreshCw } from "lucide-react";
+import { BookOpen, Database, RefreshCw, ChevronRight } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import Modal from "../ui/Modal";
-import Button from "../ui/Button";
 
 import ClassManager from "../features/settings/ClassManager";
 import ImportContent from "../features/settings/ImportContent";
 import SyncRoomContent from "../features/settings/SyncRoomContent";
 
 const SettingsModal = ({ 
-  // Class Props
   classColors,
   setClassColors,
   deleteClass,
@@ -18,26 +16,18 @@ const SettingsModal = ({
   mergeTarget,
   setMergeTarget,
   mergeClasses,
-  
-  // Data Props
   resetAllData,
   handleICSExport,
   onOpenJsonEditor,
-
-  // New Prop from DataContext via ModalManager wrapper (or we can useData directly inside if we refactored, but sticking to prop drill for now)
-  // Actually, SettingsModal is a child of ModalManager. 
-  // We need to make sure ModalManager passes this prop or we assume ClassManager uses useData directly. 
-  // Given previous architecture, we should update ModalManager or update SettingsModal to consume hook.
-  // For consistency with previous file dumps, let's assume we pass it down.
   onRefreshColors, 
 }) => {
   const { modals, closeModal } = useUI();
   const [activeTab, setActiveTab] = useState("classes");
 
   const tabs = [
-    { id: "classes", label: "Classes & Colors", icon: BookOpen },
-    { id: "data", label: "Data Management", icon: Database },
-    { id: "sync", label: "Sync Room", icon: RefreshCw },
+    { id: "classes", label: "Classes", icon: BookOpen },
+    { id: "data", label: "Data & Sync", icon: Database },
+    { id: "sync", label: "Sync", icon: RefreshCw },
   ];
 
   const renderContent = () => {
@@ -47,7 +37,7 @@ const SettingsModal = ({
           classColors={classColors}
           setClassColors={setClassColors}
           onDeleteClass={deleteClass}
-          onRefreshColors={onRefreshColors} // Pass it here
+          onRefreshColors={onRefreshColors}
           mergeSource={mergeSource}
           setMergeSource={setMergeSource}
           mergeTarget={mergeTarget}
@@ -75,26 +65,36 @@ const SettingsModal = ({
       title="Settings"
       size="xl"
     >
-      <div className="flex flex-col md:flex-row gap-6 min-h-[400px]">
-        <aside className="w-full md:w-48 flex flex-col gap-1 shrink-0">
+      <div className="flex flex-col md:flex-row gap-6 min-h-[450px]">
+        {/* Sidebar - Mac Preferences Style */}
+        <aside className="w-full md:w-56 flex flex-col gap-1.5 shrink-0">
           {tabs.map((tab) => (
-            <Button
+            <button
               key={tab.id}
-              variant="ghost"
               onClick={() => setActiveTab(tab.id)}
-              className={`justify-start gap-3 ${
-                activeTab === tab.id 
-                  ? "bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-semibold" 
-                  : "text-secondary"
-              }`}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                ${
+                  activeTab === tab.id 
+                    ? "bg-[#007AFF] text-white shadow-lg shadow-blue-500/20" 
+                    : "text-secondary hover:bg-black/5 dark:hover:bg-white/10"
+                }
+              `}
             >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </Button>
+              <div className={`p-1.5 rounded-lg ${activeTab === tab.id ? "bg-white/20" : "bg-transparent"}`}>
+                  <tab.icon className="w-4 h-4" />
+              </div>
+              <span className="flex-1 text-left">{tab.label}</span>
+              {activeTab === tab.id && <ChevronRight className="w-4 h-4 opacity-50" />}
+            </button>
           ))}
         </aside>
 
-        <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 border border-divider">
+        {/* Vertical Divider for Desktop */}
+        <div className="hidden md:block w-px bg-gradient-to-b from-transparent via-black/5 dark:via-white/10 to-transparent mx-2" />
+
+        {/* Content Area */}
+        <div className="flex-1 bg-white/40 dark:bg-black/20 rounded-[24px] p-6 border border-white/40 dark:border-white/5 shadow-inner">
           {renderContent()}
         </div>
       </div>
