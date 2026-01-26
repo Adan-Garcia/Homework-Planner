@@ -26,16 +26,16 @@ const TaskModal = ({ requestDelete }) => {
     groupId: null
   });
 
-  // All Day State
+  
   const [isAllDay, setIsAllDay] = useState(false);
   
-  // Edit Scope State (Single vs Series)
+  
   const [editScope, setEditScope] = useState("single");
 
   useEffect(() => {
     if (editingTask) {
-      // FIX: Ensure all fields have fallback values (strings) to prevent "uncontrolled" input errors
-      // Previously, fields like 'time' or 'description' could be null, causing React warnings.
+      
+      
       setFormData({
         ...editingTask,
         title: editingTask.title || "",
@@ -50,7 +50,7 @@ const TaskModal = ({ requestDelete }) => {
         groupId: editingTask.groupId || null
       });
 
-      // Logic: If no time is set, assume All Day
+      
       setIsAllDay(!editingTask.time);
       setEditScope("single");
     } else {
@@ -75,14 +75,14 @@ const TaskModal = ({ requestDelete }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Prepare final object
+    
     const finalData = { 
         ...formData,
         time: isAllDay ? "" : formData.time 
     };
 
     if (editingTask) {
-      // If editing a series, pass the editScope to the backend/context logic
+      
       updateEvent({ 
           ...editingTask, 
           ...finalData,
@@ -97,11 +97,11 @@ const TaskModal = ({ requestDelete }) => {
   const handleDeleteClick = () => {
     if (!editingTask) return;
     
-    // Determine if we are deleting the whole series
+    
     const shouldDeleteSeries = editScope === "series" && editingTask.groupId;
 
     if (requestDelete) {
-      // Pass the delete logic along with the series flag
+      
       requestDelete(() => deleteEvent(editingTask.id, shouldDeleteSeries, editingTask.groupId));
     } else {
       if (confirm(`Are you sure you want to delete this ${shouldDeleteSeries ? 'series' : 'task'}?`)) {
@@ -189,7 +189,7 @@ const TaskModal = ({ requestDelete }) => {
             required
           />
           
-          {/* All Day Logic & UI */}
+         
           <div className="space-y-1.5 relative">
             <div className="flex justify-between items-center">
                  <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Time</label>
@@ -245,7 +245,7 @@ const TaskModal = ({ requestDelete }) => {
           />
         </div>
 
-        {/* Recurrence UI */}
+        
         {!editingTask ? (
            <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-100 dark:border-slate-600/50 space-y-3">
                <div className="flex items-center gap-2">
@@ -272,7 +272,7 @@ const TaskModal = ({ requestDelete }) => {
                </div>
            </div>
         ) : (
-            // Series Edit UI
+            
             editingTask.groupId && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-100 dark:border-amber-900/30">
                     <div className="flex items-center gap-2 mb-2">

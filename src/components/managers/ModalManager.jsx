@@ -22,12 +22,12 @@ const ModalManager = () => {
     exportICS,
     importJsonData,
     deleteEvent, 
-    refreshClassColors, // Get the function
+    refreshClassColors, 
   } = useData();
 
   const { roomId, roomPassword } = useAuth();
   
-  // State ...
+  
   const [mergeSource, setMergeSource] = useState("");
   const [mergeTarget, setMergeTarget] = useState("");
   const [jsonEditText, setJsonEditText] = useState("");
@@ -41,7 +41,7 @@ const ModalManager = () => {
     isDanger: false,
   });
 
-  // Effects & Handlers ...
+  
   useEffect(() => {
     if (roomId && !roomPassword && !offlineMode) {
       setIsReloginOpen(true);
@@ -59,7 +59,7 @@ const ModalManager = () => {
     const result = importJsonData(jsonEditText, false); 
     if (result.success) {
       closeModal("jsonEdit");
-      // RESTORED: Redirect to planner view on success
+      
       if (view === "setup") {
         setView("planner");
       }
@@ -117,7 +117,7 @@ const ModalManager = () => {
         resetAllData={requestResetData}
         handleICSExport={exportICS}
         onOpenJsonEditor={handleOpenJsonEditor}
-        onRefreshColors={refreshClassColors} // Pass it here
+        onRefreshColors={refreshClassColors} 
       />
 
       <JsonEditorModal 

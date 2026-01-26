@@ -8,7 +8,7 @@ const ClassManager = ({
   setClassColors,
   onDeleteClass,
   onRenameClass,
-  onRefreshColors, // New prop
+  onRefreshColors, 
   mergeSource,
   setMergeSource,
   mergeTarget,

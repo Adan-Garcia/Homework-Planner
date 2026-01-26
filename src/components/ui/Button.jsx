@@ -1,6 +1,6 @@
 import React from "react";
 
-// Maps your "variant" prop to your CSS abstraction classes
+
 const VARIANTS = {
   primary: "btn-primary",
   secondary: "btn-secondary",

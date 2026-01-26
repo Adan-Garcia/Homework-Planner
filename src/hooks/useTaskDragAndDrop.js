@@ -37,7 +37,7 @@ export const useTaskDragAndDrop = () => {
       targetDate.setDate(targetDate.getDate() + 1);
     }
     
-    // For "today" and "tomorrow", we just need the date string
+    
     const dateStr = targetDate.toISOString().split("T")[0];
     
     const ev = events.find((e) => e.id === id);

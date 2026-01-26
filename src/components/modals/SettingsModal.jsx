@@ -6,7 +6,7 @@ import Modal from "../ui/Modal";
 import ClassManager from "../features/settings/ClassManager";
 import ImportContent from "../features/settings/ImportContent";
 import SyncRoomContent from "../features/settings/SyncRoomContent";
-import DateCleanerContent from "../features/settings/DateCleanerContent"; // RESTORED
+import DateCleanerContent from "../features/settings/DateCleanerContent";
 
 const SettingsModal = ({ 
   classColors,
@@ -27,7 +27,7 @@ const SettingsModal = ({
 
   const tabs = [
     { id: "classes", label: "Classes", icon: BookOpen },
-    { id: "tools", label: "Tools", icon: Wrench }, // RESTORED
+    { id: "tools", label: "Tools", icon: Wrench },
     { id: "data", label: "Data", icon: Database },
     { id: "sync", label: "Sync", icon: RefreshCw },
     
@@ -57,7 +57,7 @@ const SettingsModal = ({
         />
       );
       case "sync": return <SyncRoomContent />;
-      // RESTORED: Date Cleaner
+      
       case "tools": return (
         <div className="space-y-6">
            <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-xl border border-orange-100 dark:border-orange-900/20">
@@ -83,7 +83,7 @@ const SettingsModal = ({
       size="xl"
     >
       <div className="flex flex-col md:flex-row gap-6 min-h-[450px]">
-        {/* Sidebar - Mac Preferences Style */}
+       
         <aside className="w-full md:w-56 flex flex-col gap-1.5 shrink-0">
           {tabs.map((tab) => (
             <button
@@ -107,10 +107,10 @@ const SettingsModal = ({
           ))}
         </aside>
 
-        {/* Vertical Divider for Desktop */}
+        
         <div className="hidden md:block w-px bg-gradient-to-b from-transparent via-black/5 dark:via-white/10 to-transparent mx-2" />
 
-        {/* Content Area */}
+        
         <div className="flex-1 bg-white/40 dark:bg-black/20 rounded-[24px] p-6 border border-white/40 dark:border-white/5 shadow-inner">
           {renderContent()}
         </div>

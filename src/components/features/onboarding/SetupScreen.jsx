@@ -34,7 +34,7 @@ const SetupScreen = () => {
     if (!file) return;
     try {
       const text = await file.text();
-      // Added 'await' here because processICSContent will become asynchronous
+      
       const result = await processICSContent(text); 
       if (result.success) setView("planner");
       else setError(result.error);
@@ -90,7 +90,7 @@ const SetupScreen = () => {
   const handleCreateNew = (e) => {
     e.preventDefault();
     
-    // Validate Password Length
+    
     if (!passwordInput || passwordInput.length < 10) {
       setError("Password must be at least 10 characters long.");
       return;
@@ -113,7 +113,7 @@ const SetupScreen = () => {
   return (
     <div className="h-screen w-full overflow-y-auto bg-[#F2F2F7] dark:bg-black transition-colors duration-500 relative font-sans selection:bg-blue-500/30">
       
-      {/* Ambient Background */}
+      
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
          <div className="absolute top-[-10%] left-[20%] w-[70%] h-[70%] bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
          <div className="absolute bottom-[-10%] right-[20%] w-[60%] h-[60%] bg-purple-400/20 dark:bg-purple-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
@@ -121,7 +121,7 @@ const SetupScreen = () => {
 
       <div className="min-h-full flex flex-col items-center justify-center p-4 py-12 relative z-10">
         
-        {/* Theme Toggle */}
+        
         <div className="absolute top-6 right-6">
           <button
             onClick={() => setDarkMode(prev => !prev)}
@@ -131,7 +131,7 @@ const SetupScreen = () => {
           </button>
         </div>
 
-        {/* Content Container */}
+        
         <div className="max-w-5xl w-full my-auto flex flex-col items-center">
           
           <header className="text-center mb-16 animate-in slide-in-from-bottom-8 duration-700 fade-in">
@@ -155,7 +155,6 @@ const SetupScreen = () => {
 
           <div className="grid lg:grid-cols-3 gap-6 w-full animate-in slide-in-from-bottom-12 duration-1000 fade-in fill-mode-backwards" style={{ animationDelay: '100ms' }}>
             
-            {/* Card 1: Sync */}
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
               <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-[#007AFF] mb-6">
                 <Smartphone className="w-6 h-6" />
@@ -202,7 +201,7 @@ const SetupScreen = () => {
               </form>
             </div>
 
-            {/* Card 2: Import */}
+            
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
               <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 mb-6">
                 <Upload className="w-6 h-6" />
@@ -249,7 +248,6 @@ const SetupScreen = () => {
               </div>
             </div>
 
-            {/* Card 3: Fresh */}
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300 border-dashed border-2 !border-black/5 dark:!border-white/10">
               <div className="w-12 h-12 rounded-2xl bg-slate-500/10 flex items-center justify-center text-slate-500 mb-6">
                 <Plus className="w-6 h-6" />

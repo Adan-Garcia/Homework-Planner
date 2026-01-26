@@ -67,7 +67,7 @@ export const DataProvider = ({ children }) => {
     syncColors,
     bulkAddEvents: serverBulkAdd,
     clearAllEvents: serverClear,
-    peerCount, // 1. Destructure peerCount from the hook
+    peerCount, 
   } = useSocketSync(
     roomId,
     authToken,
@@ -180,19 +180,19 @@ export const DataProvider = ({ children }) => {
   const deleteEvent = useCallback(
     (id, deleteSeries = false, groupId = null) => {
       if (deleteSeries && groupId) {
-        // Find all events in the series
+        
         const eventsToDelete = eventsRef.current.filter(e => e.groupId === groupId);
         
         if (isAuthorized) {
-           // For authorized rooms, we delete each event individually 
-           // since we don't have a direct "bulkDelete" exposed yet.
+           
+           
            eventsToDelete.forEach(ev => serverDelete(ev.id));
         } else {
-           // Local delete: filter out everything in the group
+           
            setEvents((prev) => prev.filter((e) => e.groupId !== groupId));
         }
       } else {
-        // Standard single delete
+        
         if (isAuthorized) serverDelete(id);
         else setEvents((prev) => prev.filter((e) => e.id !== id));
       }
@@ -343,7 +343,7 @@ export const DataProvider = ({ children }) => {
     [classColors, handleSetClassColors, isAuthorized, bulkAddEvents],
   );
 
-  // New function to handle URL imports via backend proxy
+  
   const importICSFromUrl = useCallback(async (url) => {
     try {
       const text = await fetchRemoteICS(url);
@@ -393,7 +393,7 @@ export const DataProvider = ({ children }) => {
       importICSFromUrl, 
       resetAllData,
       isAuthorized,
-      peerCount, // 2. Add peerCount to value object
+      peerCount, 
     }),
     [
       events,
@@ -415,7 +415,7 @@ export const DataProvider = ({ children }) => {
       importICSFromUrl,
       resetAllData,
       isAuthorized,
-      peerCount, // 3. Add peerCount to dependencies
+      peerCount, 
     ],
   );
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"; // 1. Added useMemo, useCallback
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"; 
 import { STORAGE_KEYS } from "../utils/constants.js";
 
 const UIContext = createContext();
@@ -34,7 +34,7 @@ export const UIProvider = ({ children }) => {
   });
   const [editingTask, setEditingTask] = useState(null);
   
-  // --- NEW: Mobile Sidebar State ---
+  
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -56,7 +56,7 @@ export const UIProvider = ({ children }) => {
     else document.documentElement.classList.remove("dark");
   }, [darkMode]);
 
-  // 2. Wrap functions in useCallback to stabilize references
+  
   const openModal = useCallback((name) => {
     setModals((prev) => ({ ...prev, [name]: true }));
   }, []);
@@ -70,7 +70,7 @@ export const UIProvider = ({ children }) => {
     openModal("task");
   }, [openModal]);
 
-  // 3. Memoize the value object
+  
   const value = useMemo(() => ({
     darkMode,
     setDarkMode,

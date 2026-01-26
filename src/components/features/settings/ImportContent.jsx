@@ -53,7 +53,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
       <div className="space-y-4">
          <h4 className="px-1 text-heading mb-2">Import / Export</h4>
          
-         {/* URL Import */}
+        
          <div className="space-y-2">
             <label className="text-[10px] uppercase tracking-wider font-semibold text-secondary px-1">
                 Import from URL
@@ -78,7 +78,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
          </div>
 
          <div className="grid grid-cols-1 gap-2 pt-2 border-t border-divider">
-            {/* Import ICS */}
+            
             <input
               type="file"
               accept=".ics"
@@ -92,8 +92,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
             >
               <Upload className="icon-xs" /> Import ICS File
             </button>
-            
-            {/* Export ICS - Restored */}
+       
             <button
               onClick={onExport}
               className="btn-base btn-secondary"
@@ -101,7 +100,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
               <Download className="icon-xs" /> Export Schedule (ICS)
             </button>
     
-            {/* Import JSON */}
+       
             <input
               type="file"
               accept=".json"
@@ -125,7 +124,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
           </button>
       </div>
       
-      {/* Danger Zone */}
+     
       <div className="pt-4 border-t border-divider space-y-2">
          <h4 className="px-1 text-heading text-red-600 dark:text-red-400 flex items-center gap-2">
             <AlertTriangle className="icon-xs" /> Danger Zone

@@ -1,4 +1,4 @@
-// src/workers/ics.worker.js
+
 import ICAL from "ical.js";
 import { determineClass, determineType } from "../utils/helpers";
 

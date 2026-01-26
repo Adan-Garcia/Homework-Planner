@@ -12,7 +12,7 @@ export const useDragDrop = () => {
 };
 
 export const DragDropProvider = ({ children }) => {
-  // The state lives here now, not in App.jsx
+  
   const dragLogic = useTaskDragAndDrop();
 
   return (

@@ -6,7 +6,7 @@ export const fetchRemoteICS = async (url) => {
     const response = await fetch(`${API_BASE_URL}/api/proxy/ical?url=${encodeURIComponent(url)}`);
     
     if (!response.ok) {
-      // Try to parse error message from backend
+      
       try {
         const errData = await response.json();
         throw new Error(errData.error || "Failed to fetch calendar");
@@ -18,7 +18,7 @@ export const fetchRemoteICS = async (url) => {
     return await response.text();
   } catch (error) {
     console.error("ICS Fetch Error:", error);
-    throw error; // Re-throw to be handled by the UI
+    throw error; 
   }
 };
 
@@ -31,7 +31,7 @@ export const processICSContent = (
   setEvents,
 ) => {
   return new Promise((resolve) => {
-    // Initialize Worker
+    
     const worker = new Worker(new URL('../workers/ics.worker.js', import.meta.url), {
       type: 'module',
     });
@@ -47,7 +47,7 @@ export const processICSContent = (
         return;
       }
 
-      // Color Assignment Logic (Main Thread)
+      
       let finalColors = { ...currentClassColors };
       const defaultPalette = [
         "#3b82f6", "#10b981", "#f59e0b", "#ef4444", 

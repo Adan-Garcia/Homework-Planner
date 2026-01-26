@@ -6,7 +6,7 @@ import Button from "../../ui/Button";
 import { useUI } from "../../../context/PlannerContext"; 
 import { useDragDrop } from "../../../context/DragDropContext";
 
-// --- Extracted TaskItem Component ---
+
 const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
   const { draggedEventId, handleDragStart } = useDragDrop();
 
@@ -24,7 +24,7 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
         ${draggedEventId === task.id ? "opacity-30 ring-2 ring-blue-400 rotate-2 scale-95" : ""}
       `}
     >
-      {/* Checkbox */}
+      
       <button
         onClick={(e) => {
              e.stopPropagation();
@@ -41,7 +41,7 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
         <Check className="w-3 h-3 stroke-[4]" />
       </button>
 
-      {/* Content */}
+      
       <div className="flex-1 min-w-0 py-0.5">
         <div className="flex items-center justify-between gap-2 mb-1.5">
            <div className="flex items-center gap-1.5 min-w-0">
@@ -82,7 +82,7 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
   );
 };
 
-// --- Extracted DropZone Component (Collapsible) ---
+
 const DropZone = ({ 
   title, 
   groupKey, 
@@ -129,7 +129,7 @@ const DropZone = ({
         </div>
       </button>
       
-      {/* Collapsible Content */}
+      
       <div className={`
         flex flex-col gap-3 transition-all duration-300 origin-top
         ${isOpen ? "opacity-100 max-h-[1000px]" : "opacity-0 max-h-0 overflow-hidden"}
@@ -155,7 +155,7 @@ const DropZone = ({
   );
 };
 
-// --- Main Sidebar Component ---
+
 const Sidebar = ({
   filteredEvents = [],
   classColors = {},
@@ -185,12 +185,12 @@ const Sidebar = ({
   const groupedTasks = useMemo(() => {
     const groups = { overdue: [], today: [], tomorrow: [], upcoming: [] };
     
-    // Guard clause in case filteredEvents is null/undefined during initial load
+    
     if (!filteredEvents || !Array.isArray(filteredEvents)) return groups;
 
     filteredEvents.forEach((task) => {
       if (!task.date) return;
-      // Safety check for date string validity
+      
       let taskDate;
       try {
         taskDate = parseISO(task.date);
@@ -198,16 +198,16 @@ const Sidebar = ({
         return;
       }
       
-      // If hiding completed tasks globally, skip
+      
       if (task.completed && !showCompleted) return;
 
       const isTaskOverdue = isPast(taskDate) && !isToday(taskDate);
       
-      // Logic Fix:
-      // 1. Overdue: Only show if NOT completed (and strictly past)
-      // 2. Today: Show regardless of completion (if showCompleted is true)
-      // 3. Tomorrow: Show regardless of completion
-      // 4. Upcoming: Show regardless of completion
+      
+      
+      
+      
+      
       
       if (isTaskOverdue) {
         if (!task.completed) {
@@ -229,7 +229,7 @@ const Sidebar = ({
 
   return (
     <>
-      {/* Mobile Backdrop */}
+      
       <div 
         className={`fixed inset-0 z-[40] bg-black/30 backdrop-blur-md transition-opacity duration-500 md:hidden ${mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
         onClick={() => setMobileMenuOpen(false)}
@@ -249,7 +249,7 @@ const Sidebar = ({
           md:relative md:inset-auto md:translate-x-0 md:w-80 md:h-full md:rounded-[32px]
         `}
       >
-        {/* Header */}
+        
         <div className="p-5 pb-2 space-y-4 bg-white/40 dark:bg-black/20 backdrop-blur-md z-10">
           <div className="flex items-center justify-between md:hidden">
             <h3 className="font-bold text-lg text-primary">Tasks</h3>
@@ -294,7 +294,7 @@ const Sidebar = ({
             </Button>
           </div>
 
-          {/* Class Filters */}
+          
           <div className="pt-2 border-t border-black/5 dark:border-white/5">
             <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
               <button
@@ -337,7 +337,7 @@ const Sidebar = ({
 
         </div>
 
-        {/* Task List Container */}
+        
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 pb-32 mask-gradient-b">
           
           {(!hideOverdue && groupedTasks.overdue && groupedTasks.overdue.length > 0) && (

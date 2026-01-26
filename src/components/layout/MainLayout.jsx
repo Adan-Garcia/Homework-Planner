@@ -37,18 +37,17 @@ const MainLayout = ({ children }) => {
   return (
     <div className="h-[100dvh] flex flex-col surface-main text-primary font-sans overflow-hidden transition-colors duration-500 relative selection:bg-blue-500/30">
       
-      {/* --- Ambient Background --- */}
+     
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-400/20 dark:bg-purple-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
       </div>
 
-      {/* --- Header (Floating Island) --- */}
+      
       <header className="shrink-0 z-30 pt-2 px-2 sm:pt-4 sm:px-6 relative">
         <div className="mac-glass rounded-full h-14 sm:h-16 px-2 sm:px-4 flex items-center justify-between gap-2 sm:gap-4">
           
-          {/* Left: Logo & Menu */}
-          {/* Changed w-1/4 to w-auto to prevent dead space issues */}
+          
           <div className="flex items-center gap-3 w-auto min-w-fit pl-1">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -67,8 +66,7 @@ const MainLayout = ({ children }) => {
             </div>
           </div>
 
-          {/* Center: Segmented Control (Pill) */}
-          {/* Uses flex-1 to take available space, but min-w-0 prevents blowout */}
+      
           <div className="flex-1 max-w-sm mx-auto min-w-0 px-2">
             <div className="flex p-1 bg-black/5 dark:bg-white/10 rounded-full w-full backdrop-blur-sm">
               {viewOptions.map((v) => (
@@ -88,8 +86,7 @@ const MainLayout = ({ children }) => {
             </div>
           </div>
 
-          {/* Right: Actions */}
-          {/* Changed w-1/4 to w-auto to allow buttons to sit naturally without overlap */}
+         
           <div className="flex items-center justify-end gap-1.5 w-auto min-w-fit pr-1">
             <div className="flex items-center gap-1 border-r border-black/10 dark:border-white/10 pr-1.5 mr-0.5">
               <Button
@@ -121,8 +118,7 @@ const MainLayout = ({ children }) => {
         </div>
       </header>
 
-      {/* --- Main Content Area (Floating Grid) --- */}
-      {/* z-10 ensures content is below header (z-30) and drawer (z-50) */}
+     
       <div className="flex flex-1 overflow-hidden relative p-2 sm:p-4 sm:pt-4 gap-4 z-10">
           {children}
       </div>

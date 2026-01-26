@@ -31,7 +31,7 @@ const CalendarView = ({
   const { draggedEventId, handleDragStart, handleDragOver, handleDrop } = useDragDrop();
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // --- Date Logic ---
+  
   const { days, weeksCount } = useMemo(() => {
     let start, end;
     if (calendarView === "month") {
@@ -64,7 +64,7 @@ const CalendarView = ({
     }
   };
 
-  // --- OPTIMIZATION: Pre-calculate events by date ---
+  
   const eventsByDate = useMemo(() => {
     const map = {};
     if (!filteredEvents) return map;
@@ -99,7 +99,7 @@ const CalendarView = ({
         backgroundColor: isCompact ? `${classColors[task.class]}25` : undefined 
       }}
     >
-        {/* Decorative Pill for Non-Compact */}
+        
         {!isCompact && (
             <div className="absolute left-1 top-3 bottom-3 w-1 rounded-full" style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }} />
         )}
@@ -131,20 +131,20 @@ const CalendarView = ({
     </div>
   );
 
-  // --- MOBILE VIEW ---
+  
   const MobileView = () => {
     const isMonthView = calendarView === 'month';
     const activeDays = isMonthView 
         ? eachDayOfInterval({ start: startOfWeek(startOfMonth(currentDate)), end: endOfWeek(endOfMonth(currentDate)) })
         : eachDayOfInterval({ start: subDays(currentDate, 3), end: addDays(currentDate, 3) });
 
-    // Optimization: Use lookup map instead of filter
+    
     const selectedDateKey = format(currentDate, "yyyy-MM-dd");
     const selectedEvents = eventsByDate[selectedDateKey] || [];
 
     return (
       <div className="flex flex-col h-full w-full mac-glass rounded-[32px] overflow-hidden">
-         {/* Top Control Bar */}
+         
          <div className="bg-white/40 dark:bg-black/20 border-b border-black/5 dark:border-white/5 shrink-0 p-4 pb-2 backdrop-blur-md">
             <div className="flex justify-between items-center mb-4">
                <span className="font-bold text-xl tracking-tight text-primary">{format(currentDate, "MMMM yyyy")}</span>
@@ -155,7 +155,6 @@ const CalendarView = ({
                </div>
             </div>
             
-            {/* Scrollable Date Strip/Grid */}
             <div className={`
                 ${isMonthView ? "grid grid-cols-7 gap-y-2" : "flex overflow-x-auto gap-3 snap-x scrollbar-hide pb-2"}
             `}>
@@ -194,7 +193,7 @@ const CalendarView = ({
                 })}
             </div>
          </div>
-         {/* Task List */}
+         
          <div className="flex-1 overflow-y-auto p-4 space-y-3">
              <h3 className="text-xs font-bold uppercase text-secondary tracking-wider mb-3 pl-1">{format(currentDate, "EEEE, MMMM do")}</h3>
              {selectedEvents.length > 0 ? (
@@ -213,14 +212,14 @@ const CalendarView = ({
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
       
-      {/* MOBILE RENDERER */}
+      
       <div className="md:hidden h-full">
          <MobileView />
       </div>
 
-      {/* DESKTOP RENDERER */}
+      
       <div className="hidden md:flex flex-col h-full w-full relative mac-glass rounded-[32px] overflow-hidden">
-         {/* Desktop Header */}
+         
          <header className="flex items-center justify-between px-6 py-4 shrink-0 z-20 bg-white/40 dark:bg-black/20 backdrop-blur-md">
             <h2 className="text-2xl font-bold text-primary tracking-tight">
                {calendarView === "agenda" ? "Upcoming Agenda" : format(currentDate, "MMMM yyyy")}
@@ -234,14 +233,14 @@ const CalendarView = ({
             )}
          </header>
 
-         {/* Desktop Content Area */}
+         
          <div className="flex-1 overflow-hidden p-6 pt-2">
              <div className="w-full h-full bg-white/40 dark:bg-black/20 rounded-[24px] overflow-hidden flex flex-col border border-white/40 dark:border-white/5">
             
-                {/* --- Month View --- */}
+                
                 {calendarView === "month" && (
                 <div className="flex flex-col h-full w-full">
-                    {/* Day Names Header */}
+                    
                     <div className="grid grid-cols-7 border-b border-black/5 dark:border-white/5 shrink-0 bg-white/30 dark:bg-white/5">
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName) => (
                             <div key={dayName} className="py-3 text-center text-xs font-bold uppercase text-secondary tracking-wider opacity-80">
@@ -250,19 +249,19 @@ const CalendarView = ({
                         ))}
                     </div>
                     
-                    {/* The Grid */}
+                    
                     <div 
                         className="grid grid-cols-7 w-full h-full"
                         style={{ gridTemplateRows: `repeat(${weeksCount}, minmax(0, 1fr))` }}
                     >
                         {days.map((day, idx) => {
-                            // Optimization: Use lookup map
+                            
                             const dayKey = format(day, "yyyy-MM-dd");
                             const dayEvents = eventsByDate[dayKey] || [];
                             const isCurrentMonth = isSameMonth(day, currentDate);
                             const isTodayDay = isToday(day);
                             
-                            // Calculate border classes
+                            
                             const borderRight = (idx + 1) % 7 !== 0 ? 'border-r border-black/5 dark:border-white/5' : '';
                             const borderBottom = idx < days.length - 7 ? 'border-b border-black/5 dark:border-white/5' : '';
                             
@@ -278,7 +277,7 @@ const CalendarView = ({
                                     ${borderRight} ${borderBottom}
                                     `}
                                 >
-                                    {/* Date Number */}
+                                    
                                     <div className="p-2 shrink-0 flex justify-center pt-3">
                                         <span className={`
                                             text-xs font-bold w-8 h-8 flex items-center justify-center rounded-full transition-all
@@ -290,7 +289,7 @@ const CalendarView = ({
                                         </span>
                                     </div>
                                     
-                                    {/* Scrollable Event Area */}
+                                    
                                     <div className="flex-1 overflow-y-auto px-1.5 pb-1 space-y-1 custom-scrollbar">
                                         {dayEvents.map((task) => (
                                         <CalendarTaskCard key={task.id} task={task} isCompact />
@@ -303,11 +302,11 @@ const CalendarView = ({
                 </div>
                 )}
 
-                {/* --- Week View --- */}
+                
                 {calendarView === "week" && (
                 <div className="flex h-full w-full">
                     {days.map((day, i) => {
-                        // Optimization: Use lookup map
+                        
                         const dayKey = format(day, "yyyy-MM-dd");
                         const dayEvents = eventsByDate[dayKey] || [];
 
@@ -327,7 +326,7 @@ const CalendarView = ({
                 </div>
                 )}
                 
-                {/* --- Day/Agenda View --- */}
+                
                 {(calendarView === "agenda" || calendarView === "day") && (
                 <div className="h-full overflow-y-auto p-8 custom-scrollbar">
                     <div className="max-w-4xl mx-auto">
@@ -339,10 +338,10 @@ const CalendarView = ({
                         </div>
 
                         <div className="space-y-8 pb-20 relative">
-                            {/* Vertical line through entire timeline */}
+                            
                             <div className="absolute left-[7.5rem] top-0 bottom-0 w-px bg-black/5 dark:bg-white/5 hidden md:block" />
 
-                            {/* Optimization: Use lookup map for 'day' view */}
+                            
                             {(calendarView === 'day' 
                                 ? (eventsByDate[format(currentDate, "yyyy-MM-dd")] || []) 
                                 : filteredEvents
@@ -357,7 +356,7 @@ const CalendarView = ({
                                         </div>
                                     </div>
                                     
-                                    {/* Timeline Dot */}
+                                    
                                     <div className="relative flex flex-col items-center self-stretch hidden md:flex">
                                         <div className="w-4 h-4 rounded-full border-[3px] border-[#F2F2F7] dark:border-[#1c1c1e] bg-[#007AFF] shadow-lg shadow-blue-500/30 z-10 mt-5 transition-transform group-hover:scale-125 duration-300" />
                                     </div>
@@ -368,7 +367,7 @@ const CalendarView = ({
                                 </div>
                             ))}
                             
-                            {/* Empty State */}
+                            
                             {(calendarView === 'day' 
                                 ? (!eventsByDate[format(currentDate, "yyyy-MM-dd")] || eventsByDate[format(currentDate, "yyyy-MM-dd")].length === 0)
                                 : filteredEvents.length === 0

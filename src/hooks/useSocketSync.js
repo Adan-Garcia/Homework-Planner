@@ -14,7 +14,7 @@ export const useSocketSync = (
   localClassColors,
 ) => {
   const [socket, setSocket] = useState(null);
-  const [peerCount, setPeerCount] = useState(0); // New state for peers
+  const [peerCount, setPeerCount] = useState(0); 
   const isInitialLoadDone = useRef(false);
 
   const localEventsRef = useRef(localEvents);
@@ -178,7 +178,7 @@ export const useSocketSync = (
       }
     };
     
-    // Peer count listener
+    
     const handleRoomCount = (count) => {
       setPeerCount(count);
     };
@@ -200,10 +200,10 @@ export const useSocketSync = (
 
   const addEvent = useCallback(
     async (event) => {
-      // 1. Optimistic Update (Always run this first)
+      
       setEvents((prev) => [...prev, event]);
 
-      // 2. Network Check
+      
       if (!socket || !cryptoKey) return;
 
       try {
@@ -211,7 +211,7 @@ export const useSocketSync = (
         await emitAsync("event:save", { roomId, event: encrypted });
       } catch (err) {
         console.error("Sync failed:", err);
-        // Rollback on error
+        
         setEvents((prev) => prev.filter((e) => e.id !== event.id));
       }
     },
@@ -220,10 +220,10 @@ export const useSocketSync = (
 
   const bulkAddEvents = useCallback(
     async (events) => {
-      // 1. Optimistic Update
+      
       setEvents((prev) => [...prev, ...events]);
       
-      // 2. Network Check
+      
       if (!socket || !cryptoKey || events.length === 0) return;
 
       try {
@@ -233,7 +233,7 @@ export const useSocketSync = (
         await emitAsync("event:bulk_save", { roomId, events: encryptedEvents });
       } catch (err) {
         console.error("Bulk sync failed:", err);
-        // Rollback
+        
         const newIds = new Set(events.map((e) => e.id));
         setEvents((prev) => prev.filter((e) => !newIds.has(e.id)));
       }
@@ -243,14 +243,14 @@ export const useSocketSync = (
 
   const updateEvent = useCallback(
     async (event) => {
-      // 1. Optimistic Update
+      
       let previousEvent = null;
       setEvents((prev) => {
         previousEvent = prev.find((e) => e.id === event.id);
         return prev.map((e) => (e.id === event.id ? event : e));
       });
 
-      // 2. Network Check
+      
       if (!socket || !cryptoKey) return;
 
       try {
@@ -258,7 +258,7 @@ export const useSocketSync = (
         await emitAsync("event:save", { roomId, event: encrypted });
       } catch (err) {
         console.error("Update failed:", err);
-        // Rollback
+        
         if (previousEvent) {
           setEvents((prev) =>
             prev.map((e) => (e.id === event.id ? previousEvent : e)),
@@ -271,21 +271,21 @@ export const useSocketSync = (
 
   const deleteEvent = useCallback(
     async (eventId) => {
-      // 1. Optimistic Update
+      
       let deletedEvent = null;
       setEvents((prev) => {
         deletedEvent = prev.find((e) => e.id === eventId);
         return prev.filter((e) => e.id !== eventId);
       });
 
-      // 2. Network Check
+      
       if (!socket) return;
 
       try {
         await emitAsync("event:delete", { roomId, eventId });
       } catch (err) {
         console.error("Delete failed:", err);
-        // Rollback
+        
         if (deletedEvent) {
           setEvents((prev) => [...prev, deletedEvent]);
         }
@@ -307,11 +307,11 @@ export const useSocketSync = (
   );
 
   const clearAllEvents = useCallback(async () => {
-    // 1. Optimistic Update
+    
     const eventsToDelete = localEventsRef.current || [];
     setEvents([]); 
 
-    // 2. Network Check
+    
     if (!socket) return;
 
     try {
@@ -319,7 +319,7 @@ export const useSocketSync = (
       await emitAsync("event:bulk_delete", { roomId, eventIds });
     } catch (err) {
       console.error("Clear all failed:", err);
-      // Ideally rollback here, but clearing is destructive/rare
+      
     }
   }, [socket, roomId, setEvents]);
 
@@ -330,6 +330,6 @@ export const useSocketSync = (
     syncColors,
     bulkAddEvents,
     clearAllEvents,
-    peerCount, // Export this!
+    peerCount, 
   };
 };

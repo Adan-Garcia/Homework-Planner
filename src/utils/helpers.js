@@ -137,7 +137,7 @@ export const generateICS = (events) => {
   let icsLines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Homework Planner//EN",
+    "PRODID:-
     "CALSCALE:GREGORIAN",
   ];
   events.forEach((ev) => {
@@ -196,13 +196,13 @@ export const getContrastColor = (hexcolor) => {
   return yiq >= 128 ? "#000000" : "#ffffff";
 };
 
-// --- RESTORED LOGIC: Priority -> Time ---
+
 export const compareTasks = (a, b) => {
   const dateDiff = new Date(a.date) - new Date(b.date);
   if (dateDiff !== 0) return dateDiff;
 
-  // 1. Priority: High > Normal/Medium > Low
-  // Note: "Medium" and "Normal" are treated somewhat interchangeably in the app's history
+  
+  
   const getPriorityWeight = (p) => {
     if (p === "High") return 3;
     if (p === "Medium" || p === "Normal") return 2;
@@ -212,24 +212,24 @@ export const compareTasks = (a, b) => {
   const pA = getPriorityWeight(a.priority);
   const pB = getPriorityWeight(b.priority);
   
-  // Higher weight first (Descending)
+  
   if (pA !== pB) return pB - pA;
 
-  // 2. Time: No-time (All Day) vs Specific Time
-  // Preference: All Day events at the TOP (or bottom depending on taste, but usually top)
-  // Let's stick to standard: All Day (no time) comes before Time
+  
+  
+  
   if (!a.time && b.time) return -1;
   if (a.time && !b.time) return 1;
   
-  // 3. Specific Time Compare
+  
   if (a.time && b.time) {
       const timeDiff = a.time.localeCompare(b.time);
       if (timeDiff !== 0) return timeDiff;
   }
 
-  // 4. Alphabetical
+  
   return a.title.localeCompare(b.title);
 };
 
-// URL Detection Regex
+
 export const urlRegex = /(https?:\/\/[^\s]+)/g;

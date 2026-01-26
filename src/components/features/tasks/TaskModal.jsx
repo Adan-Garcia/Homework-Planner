@@ -11,7 +11,7 @@ const TaskModal = ({
   requestDelete,
   classColors,
 }) => {
-  // We use a form ID to connect the external footer buttons to the form
+  
   const FORM_ID = "task-form-main";
 
   return (
@@ -20,7 +20,7 @@ const TaskModal = ({
       onClose={onClose}
       title={editingTask ? "Edit Task" : "New Task"}
     >
-      {/* Scrollable Content Area */}
+      
       <div className="overflow-y-auto custom-scrollbar p-1">
         <TaskForm
           id={FORM_ID}
@@ -30,7 +30,7 @@ const TaskModal = ({
         />
       </div>
 
-      {/* Footer Actions */}
+      
       <div className="flex items-center justify-between pt-6 mt-2 border-t border-divider">
         {editingTask ? (
           <button
