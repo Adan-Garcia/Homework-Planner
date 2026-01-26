@@ -51,8 +51,10 @@ export const useSocketSync = (
       }
       return;
     }
-
-    const newSocket = io(API_BASE_URL);
+    
+    const newSocket = io(API_BASE_URL, {
+      path: "/backend/socket.io", 
+    });
     setSocket(newSocket);
 
     newSocket.emit("join", roomId);
