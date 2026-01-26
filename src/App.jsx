@@ -2,6 +2,7 @@ import React from "react";
 import { useUI, UIProvider } from "./context/PlannerContext";
 import { useData, DataProvider } from "./context/DataContext";
 import { AuthProvider } from "./context/AuthContext";
+import { DragDropProvider } from "./context/DragDropContext"; // Import the new provider
 
 import SetupScreen from "./components/features/onboarding/SetupScreen";
 import Sidebar from "./components/features/calendar/Sidebar";
@@ -10,7 +11,7 @@ import CalendarView from "./components/features/calendar/CalendarView";
 import MainLayout from "./components/layout/MainLayout";
 import ModalManager from "./components/managers/ModalManager";
 
-import { useTaskDragAndDrop } from "./hooks/useTaskDragAndDrop";
+// import { useTaskDragAndDrop } from "./hooks/useTaskDragAndDrop"; // Remove this import
 import { useFilteredEvents } from "./hooks/useFilteredEvents";
 
 function PlannerApp() {
@@ -19,9 +20,8 @@ function PlannerApp() {
   
   // Custom Hooks to separate logic
   const filteredEvents = useFilteredEvents();
-  const dragLogic = useTaskDragAndDrop();
+  // const dragLogic = useTaskDragAndDrop(); // REMOVED: State is now in Context
 
-  // Props needed for Sidebar
   const {
     searchQuery, setSearchQuery,
     activeTypeFilter, setActiveTypeFilter,
@@ -70,11 +70,7 @@ function PlannerApp() {
         // Modal Props
         openEditTaskModal={(task) => openTaskModal(task)}
         
-        // Drag Props
-        draggedEventId={dragLogic.draggedEventId}
-        handleDragStart={dragLogic.handleDragStart}
-        handleDragOver={dragLogic.handleDragOver}
-        handleSidebarDrop={dragLogic.handleSidebarDrop}
+        // REMOVED: Drag Props (Sidebar will fetch them from context)
       />
       
       <CalendarView
@@ -88,17 +84,10 @@ function PlannerApp() {
         filteredEvents={filteredEvents}
         classColors={classColors}
         
-        // --- FIXED: Prop name matched to CalendarView definition ---
         onEventClick={(task) => openTaskModal(task)}
-        
-        // Optional: Open "New Task" modal when clicking an empty calendar cell
         onDateClick={(dateStr) => openTaskModal({ date: dateStr })} 
         
-        // Drag Props
-        draggedEventId={dragLogic.draggedEventId}
-        handleDragOver={dragLogic.handleDragOver}
-        handleDragStart={dragLogic.handleDragStart}
-        handleDrop={dragLogic.handleDrop}
+        // REMOVED: Drag Props (CalendarView will fetch them from context)
       />
       
       <ModalManager />
@@ -111,7 +100,10 @@ export default function App() {
     <AuthProvider>
       <DataProvider>
         <UIProvider>
-          <PlannerApp />
+          {/* Wrapped in DragDropProvider. Must be inside DataProvider (for event access). */}
+          <DragDropProvider>
+            <PlannerApp />
+          </DragDropProvider>
         </UIProvider>
       </DataProvider>
     </AuthProvider>

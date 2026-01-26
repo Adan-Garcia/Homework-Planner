@@ -34,7 +34,8 @@ const SetupScreen = () => {
     if (!file) return;
     try {
       const text = await file.text();
-      const result = processICSContent(text);
+      // Added 'await' here because processICSContent will become asynchronous
+      const result = await processICSContent(text); 
       if (result.success) setView("planner");
       else setError(result.error);
     } catch (err) {
@@ -63,7 +64,7 @@ const SetupScreen = () => {
         throw new Error("The URL returned data, but it doesn't look like a calendar file.");
       }
 
-      const result = processICSContent(text);
+      const result = await processICSContent(text);
       if (result.success) setView("planner");
       else setError(result.error);
 
@@ -88,13 +89,19 @@ const SetupScreen = () => {
 
   const handleCreateNew = (e) => {
     e.preventDefault();
-    if (!passwordInput.trim()) {
-      setError("Please set a password.");
+    
+    // Validate Password Length
+    if (!passwordInput || passwordInput.length < 10) {
+      setError("Password must be at least 10 characters long.");
       return;
     }
-    const newCode = roomInput.trim() || Math.random().toString(36).substring(7).toUpperCase();
+
+    const newCode = roomInput.trim()
+      ? roomInput.trim().toUpperCase()
+      : Math.random().toString(36).substring(7).toUpperCase();
+
     setRoomPassword(passwordInput);
-    setRoomId(newCode.toUpperCase());
+    setRoomId(newCode);
     setView("planner");
   };
 

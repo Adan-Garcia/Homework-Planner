@@ -4,7 +4,7 @@ import { isToday, isTomorrow, isPast, parseISO } from "date-fns";
 import Input from "../../ui/Input";
 import Button from "../../ui/Button"; 
 import { useUI } from "../../../context/PlannerContext"; 
-
+import { useDragDrop } from "../../../context/DragDropContext";
 const Sidebar = ({
   filteredEvents = [],
   classColors = {},
@@ -19,11 +19,8 @@ const Sidebar = ({
   showCompleted,
   setShowCompleted,
   hideOverdue,
-  draggedEventId,
-  handleDragStart,
-  handleDragOver,
-  handleSidebarDrop,
 }) => {
+  const { draggedEventId, handleDragStart, handleDragOver, handleSidebarDrop } = useDragDrop();
   const [localSearch, setLocalSearch] = useState(searchQuery);
   useEffect(() => {
     const handler = setTimeout(() => {

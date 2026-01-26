@@ -1,4 +1,4 @@
-import ICAL from "ical.js"; 
+
 import { determineClass, determineType } from "./helpers";
 
 export const processICSContent = (
@@ -9,79 +9,54 @@ export const processICSContent = (
   bulkAddEvents,
   setEvents,
 ) => {
-  try {
-    
-    const jcalData = ICAL.parse(text);
-    const vcalendar = new ICAL.Component(jcalData);
-    const vevents = vcalendar.getAllSubcomponents("vevent");
+  return new Promise((resolve) => {
+    // Initialize Worker
+    const worker = new Worker(new URL('../workers/ics.worker.js', import.meta.url), {
+      type: 'module',
+    });
 
-    const newEvents = [];
-    const foundClasses = new Set();
+    worker.postMessage(text);
 
-    vevents.forEach((vevent) => {
-      const event = new ICAL.Event(vevent);
-
-      const summary = event.summary || "";
-      const description = event.description || "";
-      const location = event.location || "";
-      const startDate = event.startDate;
-
+    worker.onmessage = (e) => {
+      const { success, events, classes, error } = e.data;
       
-      if (!startDate) return;
-
-      const type = determineType(summary, description);
-      const className = determineClass(location, summary);
-
-      if (className) foundClasses.add(className);
-
-      newEvents.push({
-        id: crypto.randomUUID(), 
-        title: summary,
-        description: description,
-        location: location,
-        
-        date: startDate.toJSDate().toISOString().split("T")[0],
-        time: startDate.isDate
-          ? null
-          : startDate.toJSDate().toTimeString().substring(0, 5),
-        type: type,
-        class: className || "General",
-        completed: false,
-      });
-    });
-
-    
-    let finalColors = { ...currentClassColors };
-    const defaultPalette = [
-      "#3b82f6",
-      "#10b981",
-      "#f59e0b",
-      "#ef4444",
-      "#8b5cf6",
-      "#ec4899",
-      "#6366f1",
-      "#14b8a6",
-    ];
-    let colorIndex = Object.keys(finalColors).length;
-
-    foundClasses.forEach((cls) => {
-      if (!finalColors[cls]) {
-        finalColors[cls] = defaultPalette[colorIndex % defaultPalette.length];
-        colorIndex++;
+      if (!success) {
+        worker.terminate();
+        resolve({ success: false, error });
+        return;
       }
-    });
 
-    handleSetClassColors(finalColors);
+      // Color Assignment Logic (Main Thread)
+      let finalColors = { ...currentClassColors };
+      const defaultPalette = [
+        "#3b82f6", "#10b981", "#f59e0b", "#ef4444", 
+        "#8b5cf6", "#ec4899", "#6366f1", "#14b8a6",
+      ];
+      let colorIndex = Object.keys(finalColors).length;
 
-    if (isAuthorized) {
-      bulkAddEvents(newEvents);
-    } else {
-      setEvents((prev) => [...prev, ...newEvents]);
-    }
+      classes.forEach((cls) => {
+        if (!finalColors[cls]) {
+          finalColors[cls] = defaultPalette[colorIndex % defaultPalette.length];
+          colorIndex++;
+        }
+      });
 
-    return { success: true, count: newEvents.length };
-  } catch (e) {
-    console.error("ICS Parse Error", e);
-    return { success: false, error: "Failed to parse ICS file. Is it valid?" };
-  }
+      handleSetClassColors(finalColors);
+
+      if (isAuthorized) {
+        bulkAddEvents(events);
+      } else {
+        setEvents((prev) => [...prev, ...events]);
+      }
+
+      worker.terminate();
+      resolve({ success: true, count: events.length });
+    };
+
+    worker.onerror = (err) => {
+      console.error("Worker Error", err);
+      worker.terminate();
+      resolve({ success: false, error: "Worker failed to process file." });
+    };
+  });
 };

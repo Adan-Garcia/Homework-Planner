@@ -8,9 +8,15 @@ export const useFilteredEvents = () => {
   const { activeTypeFilter, showCompleted, searchQuery } = useUI();
 
   return useMemo(() => {
-    const cutoffDate = new Date();
-    cutoffDate.setMonth(cutoffDate.getMonth() - 1);
-    cutoffDate.setHours(0, 0, 0, 0);
+    // --- OPTIMIZATION: Calculate cutoff string once ---
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    
+    // Format as YYYY-MM-DD manually to respect local time (toISOString uses UTC)
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const cutoffString = `${year}-${month}-${day}`;
 
     const filtered = events.filter((e) => {
       // 1. Class Filter
@@ -23,8 +29,9 @@ export const useFilteredEvents = () => {
       if (!showCompleted && e.completed) return false;
 
       // 4. Date Cutoff (Don't show very old events)
-      const eventDate = new Date(e.date + "T00:00:00");
-      if (eventDate < cutoffDate) return false;
+      // --- OPTIMIZATION: Direct string comparison ---
+      // This is significantly faster than new Date(e.date + "T00:00:00")
+      if (e.date && e.date < cutoffString) return false;
 
       // 5. Search Query
       if (searchQuery) {

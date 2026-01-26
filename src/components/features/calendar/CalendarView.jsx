@@ -20,18 +20,15 @@ import {
 } from "date-fns";
 import { ChevronLeft, ChevronRight, Clock, Check, Flag } from "lucide-react";
 import Button from "../../../components/ui/Button";
-
+import { useDragDrop } from "../../../context/DragDropContext";
 const CalendarView = ({
   calendarView,
   filteredEvents,
   classColors,
   onEventClick,
   onDateClick,
-  draggedEventId,
-  handleDragStart,
-  handleDragOver,
-  handleDrop,
 }) => {
+  const { draggedEventId, handleDragStart, handleDragOver, handleDrop } = useDragDrop();
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // --- Date Logic ---
