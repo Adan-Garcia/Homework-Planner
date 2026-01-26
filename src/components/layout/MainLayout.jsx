@@ -15,6 +15,16 @@ import {
 import { useUI } from "../../context/PlannerContext";
 import Button from "../ui/Button";
 
+/**
+ * MainLayout Component
+ * * The primary application shell active once the user is authenticated/setup.
+ * * This version features a top navigation bar with segmented controls for views.
+ * * Responsibilities:
+ * 1. Responsive Header: Manages the top bar, including the hamburger menu for mobile.
+ * 2. View Switching: Provides the segmented control to switch between Month, Week, Day, and Agenda.
+ * 3. Global Actions: Access to Theme toggle, Settings modal, and "New Task" creation.
+ * 4. Dynamic Background: Renders the ambient background gradients.
+ */
 const MainLayout = ({ children }) => {
   const {
     darkMode,
@@ -27,6 +37,7 @@ const MainLayout = ({ children }) => {
     setMobileMenuOpen,
   } = useUI();
 
+  // Configuration for the segmented view controller
   const viewOptions = [
     { id: "month", icon: LayoutGrid, label: "Month" },
     { id: "week", icon: Columns, label: "Week" },
@@ -37,18 +48,20 @@ const MainLayout = ({ children }) => {
   return (
     <div className="h-[100dvh] flex flex-col surface-main text-primary font-sans overflow-hidden transition-colors duration-500 relative selection:bg-blue-500/30">
       
-     
+      {/* Dynamic Background Gradients */}
+      {/* Provides the ambient glowing orbs behind the glassmorphism UI */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-400/20 dark:bg-purple-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
       </div>
 
-      
+      {/* Main Header Section */}
       <header className="shrink-0 z-30 pt-2 px-2 sm:pt-4 sm:px-6 relative">
         <div className="mac-glass rounded-full h-14 sm:h-16 px-2 sm:px-4 flex items-center justify-between gap-2 sm:gap-4">
           
-          
+          {/* Left: Mobile Menu & Logo */}
           <div className="flex items-center gap-3 w-auto min-w-fit pl-1">
+            {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="md:hidden p-2 text-secondary hover:text-primary rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
@@ -56,6 +69,7 @@ const MainLayout = ({ children }) => {
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
+            {/* App Logo/Title */}
             <div className="flex items-center gap-2.5">
               <div className="bg-gradient-to-br from-[#007AFF] to-[#5856D6] p-1.5 rounded-lg shadow-lg shadow-blue-500/20 hidden xs:flex">
                 <CalendarIcon className="w-4 h-4 text-white" />
@@ -66,7 +80,7 @@ const MainLayout = ({ children }) => {
             </div>
           </div>
 
-      
+          {/* Center: Segmented View Control */}
           <div className="flex-1 max-w-sm mx-auto min-w-0 px-2">
             <div className="flex p-1 bg-black/5 dark:bg-white/10 rounded-full w-full backdrop-blur-sm">
               {viewOptions.map((v) => (
@@ -86,7 +100,7 @@ const MainLayout = ({ children }) => {
             </div>
           </div>
 
-         
+          {/* Right: Actions (Theme, Settings, New Task) */}
           <div className="flex items-center justify-end gap-1.5 w-auto min-w-fit pr-1">
             <div className="flex items-center gap-1 border-r border-black/10 dark:border-white/10 pr-1.5 mr-0.5">
               <Button
@@ -118,7 +132,7 @@ const MainLayout = ({ children }) => {
         </div>
       </header>
 
-     
+      {/* Main Content Area (Rendered Children) */}
       <div className="flex flex-1 overflow-hidden relative p-2 sm:p-4 sm:pt-4 gap-4 z-10">
           {children}
       </div>

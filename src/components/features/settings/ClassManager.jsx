@@ -3,6 +3,16 @@ import { RefreshCw } from "lucide-react";
 import ClassRow from "./ClassRow";
 import MergeContent from "./MergeContent";
 
+/**
+ * ClassManager Component
+ * * Settings panel for managing course categories (Classes).
+ * * Features:
+ * 1. View all discovered classes.
+ * 2. Change class colors.
+ * 3. Rename or Delete classes.
+ * 4. "Scan Tasks": Finds classes in existing tasks that might not have a color entry.
+ * 5. Merge: Combine two classes (e.g., "MATH 101" + "Math 101" -> "MATH 101").
+ */
 const ClassManager = ({
   classColors,
   setClassColors,
@@ -17,6 +27,7 @@ const ClassManager = ({
 }) => {
   const classOptions = Object.keys(classColors);
 
+  // Trigger scanning for missing colors
   const handleScan = () => {
     const updated = onRefreshColors();
     if (updated) alert("Colors updated for new classes.");
@@ -40,6 +51,7 @@ const ClassManager = ({
           </button>
         </div>
         
+        {/* Scrollable list of class rows */}
         <div className="space-y-2 overflow-y-auto custom-scrollbar pr-1 flex-1">
           {classOptions.length === 0 && (
             <p className="text-xs text-secondary italic p-2">No classes found.</p>
@@ -59,6 +71,7 @@ const ClassManager = ({
         </div>
       </section>
 
+      {/* Merge Tool Section */}
       <section className="pt-4 border-t border-divider shrink-0">
         <h4 className="mb-4 px-1 text-heading">Merge Classes</h4>
         <MergeContent

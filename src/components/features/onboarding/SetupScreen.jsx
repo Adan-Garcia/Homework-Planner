@@ -18,6 +18,15 @@ import { useUI } from "../../../context/PlannerContext";
 import { useData } from "../../../context/DataContext";
 import { useAuth } from "../../../context/AuthContext";
 
+/**
+ * SetupScreen Component
+ * * The entry point for new users or when no data/room is present.
+ * * Functionality:
+ * 1. Room Connection: Connect to an existing sync room or create a new one.
+ * 2. File Import: Upload local .ics files to seed the planner.
+ * 3. URL Import: Fetch calendars from external URLs (Canvas, Google) via proxy.
+ * 4. Manual Start: Initialize an empty planner.
+ */
 const SetupScreen = () => {
   const { processICSContent, setEvents } = useData();
   const { setRoomId, setRoomPassword, authError } = useAuth();
@@ -29,12 +38,16 @@ const SetupScreen = () => {
   const [roomInput, setRoomInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
 
+  /**
+   * Handle Local File Upload
+   * Reads .ics files directly from the user's device.
+   */
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     try {
       const text = await file.text();
-      
+      // Process content in a Web Worker to avoid freezing the UI
       const result = await processICSContent(text); 
       if (result.success) setView("planner");
       else setError(result.error);
@@ -43,6 +56,13 @@ const SetupScreen = () => {
     }
   };
 
+  /**
+   * Handle Remote URL Fetch
+   * * CORS Strategy:
+   * Browsers block fetch requests to external calendars (like Canvas) due to CORS.
+   * We use a proxy service (corsproxy.io or allorigins.win) to bypass this limitation.
+   * This allows the client to read the external .ics file content.
+   */
   const handleUrlFetch = async () => {
     if (!urlInput) return;
     setIsLoading(true);
@@ -51,15 +71,18 @@ const SetupScreen = () => {
     try {
       let text;
       try {
+        // Attempt Primary Proxy
         const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("Primary proxy refused");
         text = await response.text();
       } catch (err) {
+        // Fallback Proxy
         const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("All proxies failed");
         text = await response.text();
       }
 
+      // Basic validation to ensure we actually got a calendar file
       if (!text.includes("BEGIN:VCALENDAR")) {
         throw new Error("The URL returned data, but it doesn't look like a calendar file.");
       }
@@ -76,6 +99,10 @@ const SetupScreen = () => {
     }
   };
 
+  /**
+   * Connect to Existing Room
+   * Sets the auth context state, which triggers the authentication hook.
+   */
   const handleConnect = (e) => {
     e.preventDefault();
     if (!roomInput.trim() || !passwordInput.trim()) {
@@ -87,10 +114,14 @@ const SetupScreen = () => {
     setView("planner");
   };
 
+  /**
+   * Create New Room
+   * Generates a random room ID or uses the provided one if available.
+   */
   const handleCreateNew = (e) => {
     e.preventDefault();
     
-    
+    // Enforce password strength for security (it generates the encryption keys)
     if (!passwordInput || passwordInput.length < 10) {
       setError("Password must be at least 10 characters long.");
       return;
@@ -113,7 +144,7 @@ const SetupScreen = () => {
   return (
     <div className="h-screen w-full overflow-y-auto bg-[#F2F2F7] dark:bg-black transition-colors duration-500 relative font-sans selection:bg-blue-500/30">
       
-      
+      {/* Background Ambience */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
          <div className="absolute top-[-10%] left-[20%] w-[70%] h-[70%] bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
          <div className="absolute bottom-[-10%] right-[20%] w-[60%] h-[60%] bg-purple-400/20 dark:bg-purple-600/10 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
@@ -121,7 +152,7 @@ const SetupScreen = () => {
 
       <div className="min-h-full flex flex-col items-center justify-center p-4 py-12 relative z-10">
         
-        
+        {/* Theme Toggle */}
         <div className="absolute top-6 right-6">
           <button
             onClick={() => setDarkMode(prev => !prev)}
@@ -131,7 +162,7 @@ const SetupScreen = () => {
           </button>
         </div>
 
-        
+        {/* Header Section */}
         <div className="max-w-5xl w-full my-auto flex flex-col items-center">
           
           <header className="text-center mb-16 animate-in slide-in-from-bottom-8 duration-700 fade-in">
@@ -155,6 +186,7 @@ const SetupScreen = () => {
 
           <div className="grid lg:grid-cols-3 gap-6 w-full animate-in slide-in-from-bottom-12 duration-1000 fade-in fill-mode-backwards" style={{ animationDelay: '100ms' }}>
             
+            {/* Option 1: Sync */}
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
               <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-[#007AFF] mb-6">
                 <Smartphone className="w-6 h-6" />
@@ -201,7 +233,7 @@ const SetupScreen = () => {
               </form>
             </div>
 
-            
+            {/* Option 2: Import */}
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
               <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 mb-6">
                 <Upload className="w-6 h-6" />
@@ -248,6 +280,7 @@ const SetupScreen = () => {
               </div>
             </div>
 
+            {/* Option 3: Empty */}
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300 border-dashed border-2 !border-black/5 dark:!border-white/10">
               <div className="w-12 h-12 rounded-2xl bg-slate-500/10 flex items-center justify-center text-slate-500 mb-6">
                 <Plus className="w-6 h-6" />

@@ -21,6 +21,13 @@ import {
 import { ChevronLeft, ChevronRight, Clock, Check, Flag } from "lucide-react";
 import Button from "../../../components/ui/Button";
 import { useDragDrop } from "../../../context/DragDropContext";
+
+/**
+ * CalendarView Component
+ * * Renders the main calendar grid/list based on the selected view mode.
+ * * Supports: Month, Week, Day, and Agenda views.
+ * * Handles navigation (Next/Prev) and calculating the date grid logic.
+ */
 const CalendarView = ({
   calendarView,
   filteredEvents,
@@ -31,18 +38,23 @@ const CalendarView = ({
   const { draggedEventId, handleDragStart, handleDragOver, handleDrop } = useDragDrop();
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  
+  // --- Grid Calculation ---
+  // Memoize the array of days to render to avoid recalculating on every render.
   const { days, weeksCount } = useMemo(() => {
     let start, end;
     if (calendarView === "month") {
+      // Month View: Show all days in the month + padding days from prev/next months
+      // to fill complete weeks (startOfWeek / endOfWeek).
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
       start = startOfWeek(monthStart);
       end = endOfWeek(monthEnd);
     } else if (calendarView === "week") {
+      // Week View: Just the current week
       start = startOfWeek(currentDate);
       end = endOfWeek(currentDate);
     } else {
+      // Day/Agenda: Single day focus
       start = currentDate;
       end = currentDate;
     }
@@ -64,7 +76,8 @@ const CalendarView = ({
     }
   };
 
-  
+  // --- Event Mapping ---
+  // Group events by date string (YYYY-MM-DD) for O(1) access when rendering grid cells.
   const eventsByDate = useMemo(() => {
     const map = {};
     if (!filteredEvents) return map;
@@ -134,6 +147,7 @@ const CalendarView = ({
   
   const MobileView = () => {
     const isMonthView = calendarView === 'month';
+    // On mobile, month view shows a week strip that can expand, or we simplify for now
     const activeDays = isMonthView 
         ? eachDayOfInterval({ start: startOfWeek(startOfMonth(currentDate)), end: endOfWeek(endOfMonth(currentDate)) })
         : eachDayOfInterval({ start: subDays(currentDate, 3), end: addDays(currentDate, 3) });

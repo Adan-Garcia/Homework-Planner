@@ -137,7 +137,7 @@ export const generateICS = (events) => {
   let icsLines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-
+    "PRODID:-//Homework Planner//EN",
     "CALSCALE:GREGORIAN",
   ];
   events.forEach((ev) => {

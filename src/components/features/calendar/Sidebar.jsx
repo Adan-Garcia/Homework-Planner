@@ -129,7 +129,7 @@ const DropZone = ({
         </div>
       </button>
       
-      
+      {/* Task List (Expandable) */}
       <div className={`
         flex flex-col gap-3 transition-all duration-300 origin-top
         ${isOpen ? "opacity-100 max-h-[1000px]" : "opacity-0 max-h-0 overflow-hidden"}
@@ -156,6 +156,14 @@ const DropZone = ({
 };
 
 
+/**
+ * Sidebar Component
+ * * Displays the "Inbox" / List view of tasks, grouped by urgency.
+ * * Functionality:
+ * 1. Filtering: Search, Type, Completed status, Class (via pills).
+ * 2. Grouping: Automatically sorts tasks into Overdue, Today, Tomorrow, Upcoming.
+ * 3. Drag & Drop Target: Tasks can be dropped here to reschedule them.
+ */
 const Sidebar = ({
   filteredEvents = [],
   classColors = {},
@@ -171,6 +179,7 @@ const Sidebar = ({
   setShowCompleted,
   hideOverdue,
 }) => {
+  // Local state for search debounce
   const [localSearch, setLocalSearch] = useState(searchQuery);
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -182,10 +191,11 @@ const Sidebar = ({
   
   const { mobileMenuOpen, setMobileMenuOpen } = useUI(); 
 
+  // --- Task Grouping Logic ---
   const groupedTasks = useMemo(() => {
     const groups = { overdue: [], today: [], tomorrow: [], upcoming: [] };
     
-    
+    // Safety check for empty data
     if (!filteredEvents || !Array.isArray(filteredEvents)) return groups;
 
     filteredEvents.forEach((task) => {
@@ -198,22 +208,22 @@ const Sidebar = ({
         return;
       }
       
-      
+      // Filter out completed tasks if not showing them
       if (task.completed && !showCompleted) return;
 
       const isTaskOverdue = isPast(taskDate) && !isToday(taskDate);
       
-      
-      
-      
-      
-      
+      // Sort Logic:
+      // 1. Overdue: Past date & Not completed.
+      // 2. Today: Matches current system date.
+      // 3. Tomorrow: Current system date + 1 day.
+      // 4. Upcoming: Everything else.
       
       if (isTaskOverdue) {
         if (!task.completed) {
            groups.overdue.push(task);
         }
-        return; 
+        return; // Don't show completed overdue tasks in 'overdue' (they disappear or go to archive logic)
       }
       
       if (isToday(taskDate)) {
@@ -229,7 +239,7 @@ const Sidebar = ({
 
   return (
     <>
-      
+      {/* Mobile Overlay Backdrop */}
       <div 
         className={`fixed inset-0 z-[40] bg-black/30 backdrop-blur-md transition-opacity duration-500 md:hidden ${mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
         onClick={() => setMobileMenuOpen(false)}
@@ -249,7 +259,7 @@ const Sidebar = ({
           md:relative md:inset-auto md:translate-x-0 md:w-80 md:h-full md:rounded-[32px]
         `}
       >
-        
+        {/* Sidebar Header: Controls & Filters */}
         <div className="p-5 pb-2 space-y-4 bg-white/40 dark:bg-black/20 backdrop-blur-md z-10">
           <div className="flex items-center justify-between md:hidden">
             <h3 className="font-bold text-lg text-primary">Tasks</h3>
@@ -294,7 +304,7 @@ const Sidebar = ({
             </Button>
           </div>
 
-          
+          {/* Class Filter Pills */}
           <div className="pt-2 border-t border-black/5 dark:border-white/5">
             <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
               <button
@@ -337,7 +347,7 @@ const Sidebar = ({
 
         </div>
 
-        
+        {/* Scrollable List */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 pb-32 mask-gradient-b">
           
           {(!hideOverdue && groupedTasks.overdue && groupedTasks.overdue.length > 0) && (

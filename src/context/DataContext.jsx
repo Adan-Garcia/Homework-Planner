@@ -18,6 +18,7 @@ const DataContext = createContext();
 
 export const useData = () => useContext(DataContext);
 
+// Helper to safely load JSON from localStorage
 const loadState = (key, fallback) => {
   try {
     const item = localStorage.getItem(key);
@@ -27,9 +28,18 @@ const loadState = (key, fallback) => {
   }
 };
 
+/**
+ * DataContext Provider
+ * * Acts as the "Brain" of the application. It manages:
+ * 1. Local State (events, colors, settings)
+ * 2. Persistence (localStorage)
+ * 3. Synchronization (via useSocketSync)
+ * 4. Business Logic (recurrence, merging classes, imports)
+ */
 export const DataProvider = ({ children }) => {
   const { roomId, authToken, cryptoKey, isAuthorized } = useAuth();
 
+  // --- Local State Initialization ---
   const [events, setEvents] = useState(() =>
     loadState(STORAGE_KEYS.EVENTS, []),
   );
@@ -40,11 +50,14 @@ export const DataProvider = ({ children }) => {
     loadState(STORAGE_KEYS.HIDDEN, []),
   );
 
+  // Ref to keep track of latest events state inside callbacks/effects without adding dependencies
   const eventsRef = useRef(events);
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
 
+  // --- Persistence Effects ---
+  // Automatically save to localStorage whenever state changes
   useEffect(
     () => localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events)),
     [events],
@@ -60,6 +73,8 @@ export const DataProvider = ({ children }) => {
     [hiddenClasses],
   );
 
+  // --- Synchronization Hook ---
+  // This hook handles the encryption/decryption pipeline and socket events.
   const {
     addEvent: serverAdd,
     updateEvent: serverUpdate,
@@ -79,6 +94,13 @@ export const DataProvider = ({ children }) => {
     classColors,
   );
 
+  // --- Business Logic ---
+
+  /**
+   * Bulk Add Events
+   * Handles adding multiple events at once (e.g. from imports).
+   * Uses server sync if authorized, otherwise updates local state.
+   */
   const bulkAddEvents = useCallback(
     (newEvents) => {
       if (isAuthorized) serverBulkAdd(newEvents);
@@ -87,6 +109,13 @@ export const DataProvider = ({ children }) => {
     [isAuthorized, serverBulkAdd],
   );
 
+  /**
+   * Add Event (with Recurrence Logic)
+   * * If an event is marked as recurring:
+   * 1. It calculates the interval (7 days for weekly).
+   * 2. Generates individual event instances from start date to end date.
+   * 3. Assigns a common `groupId` to all instances for future batch edits.
+   */
   const addEvent = useCallback(
     (event) => {
       if (
@@ -94,8 +123,9 @@ export const DataProvider = ({ children }) => {
         event.recurrence !== "none" &&
         event.recurrenceEnd
       ) {
+        // --- Recurrence Expansion Logic ---
         const eventsToCreate = [];
-        const groupId = crypto.randomUUID();
+        const groupId = crypto.randomUUID(); // Link all instances together
         const startDate = parseISO(event.date);
         const endDate = parseISO(event.recurrenceEnd);
         let current = startDate;
@@ -105,8 +135,8 @@ export const DataProvider = ({ children }) => {
         while (!isAfter(current, endDate)) {
           eventsToCreate.push({
             ...event,
-            id: crypto.randomUUID(),
-            groupId,
+            id: crypto.randomUUID(), // Unique ID per instance
+            groupId, // Shared ID for the series
             date: format(current, "yyyy-MM-dd"),
           });
           current = addDays(current, interval);
@@ -114,6 +144,7 @@ export const DataProvider = ({ children }) => {
 
         bulkAddEvents(eventsToCreate);
       } else {
+        // --- Single Event Logic ---
         const eventWithId = { ...event, id: event.id || crypto.randomUUID() };
         if (isAuthorized) serverAdd(eventWithId);
         else setEvents((prev) => [...prev, eventWithId]);
@@ -122,9 +153,14 @@ export const DataProvider = ({ children }) => {
     [isAuthorized, serverAdd, bulkAddEvents],
   );
 
+  /**
+   * Update Event
+   * Handles "Single" vs "Series" updates using the `editScope` property.
+   */
   const updateEvent = useCallback(
     (event) => {
       if (event.editScope === "series" && event.groupId) {
+        // Update all events with matching groupId
         const {
           title,
           description,
@@ -169,6 +205,7 @@ export const DataProvider = ({ children }) => {
           );
         }
       } else {
+        // Standard single event update
         if (isAuthorized) serverUpdate(event);
         else
           setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
@@ -177,22 +214,25 @@ export const DataProvider = ({ children }) => {
     [isAuthorized, serverUpdate],
   );
 
+  /**
+   * Delete Event
+   * Handles deleting a single event or an entire series.
+   */
   const deleteEvent = useCallback(
     (id, deleteSeries = false, groupId = null) => {
       if (deleteSeries && groupId) {
-        
+        // Find all siblings to delete
         const eventsToDelete = eventsRef.current.filter(e => e.groupId === groupId);
         
         if (isAuthorized) {
-           
-           
+           // Server: Send individual delete commands (or bulk delete if implemented)
            eventsToDelete.forEach(ev => serverDelete(ev.id));
         } else {
-           
+           // Local: Filter out the whole group
            setEvents((prev) => prev.filter((e) => e.groupId !== groupId));
         }
       } else {
-        
+        // Single delete
         if (isAuthorized) serverDelete(id);
         else setEvents((prev) => prev.filter((e) => e.id !== id));
       }
@@ -208,6 +248,7 @@ export const DataProvider = ({ children }) => {
     [isAuthorized, syncColors],
   );
 
+  // Optimistic toggle for task completion
   const toggleTaskCompletion = useCallback(
     (id) => {
       const task = eventsRef.current.find((e) => e.id === id);
@@ -224,6 +265,8 @@ export const DataProvider = ({ children }) => {
     [isAuthorized, serverUpdate],
   );
 
+  // --- Class Management Helpers ---
+  
   const deleteClass = useCallback(
     (className) => {
       const newColors = { ...classColors };
@@ -235,6 +278,7 @@ export const DataProvider = ({ children }) => {
 
   const mergeClasses = useCallback(
     (source, target) => {
+      // Find all tasks in source class and move them to target class
       const tasksToUpdate = events.filter((e) => e.class === source);
       tasksToUpdate.forEach((task) => {
         if (isAuthorized) serverUpdate({ ...task, class: target });
@@ -243,6 +287,7 @@ export const DataProvider = ({ children }) => {
             prev.map((e) => (e.id === task.id ? { ...e, class: target } : e)),
           );
       });
+      // Remove the old color entry
       const newColors = { ...classColors };
       delete newColors[source];
       handleSetClassColors(newColors);
@@ -269,6 +314,7 @@ export const DataProvider = ({ children }) => {
     [events, classColors, handleSetClassColors, isAuthorized, serverUpdate],
   );
 
+  // Assigns random colors to any classes that don't have one assigned yet
   const refreshClassColors = useCallback(() => {
     const uniqueClasses = new Set(
       events.map((e) => e.class).filter((c) => c && c !== "General"),
@@ -297,6 +343,10 @@ export const DataProvider = ({ children }) => {
     return false;
   }, [events, classColors, handleSetClassColors]);
 
+  /**
+   * Import JSON Backup
+   * Validates structure before replacing or appending data.
+   */
   const importJsonData = useCallback(
     (jsonString, append = false) => {
       try {

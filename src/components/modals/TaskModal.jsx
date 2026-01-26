@@ -6,6 +6,15 @@ import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
 
+/**
+ * TaskModal Component
+ * * The primary interface for creating and editing tasks.
+ * * Handles both single-instance tasks and recurring series.
+ * * Features:
+ * 1. Mode Detection: Switches between "Create" and "Edit" modes based on `editingTask` prop.
+ * 2. Recurrence: Logic for creating a repeating series of events (Weekly/Biweekly).
+ * 3. Edit Scope: When editing a recurring task, allows user to update just "This Event" or "Entire Series".
+ */
 const TaskModal = ({ requestDelete }) => {
   const { modals, closeModal, editingTask } = useUI();
   const { addEvent, updateEvent, deleteEvent, classColors } = useData();
@@ -13,6 +22,7 @@ const TaskModal = ({ requestDelete }) => {
   const classes = Object.keys(classColors);
   const isOpen = modals.task;
 
+  // --- Form State ---
   const [formData, setFormData] = useState({
     title: "",
     class: "",
@@ -26,15 +36,16 @@ const TaskModal = ({ requestDelete }) => {
     groupId: null
   });
 
-  
+  // UI state for time input vs all-day toggle
   const [isAllDay, setIsAllDay] = useState(false);
   
-  
+  // Scope selection for editing recurring events ("single" vs "series")
   const [editScope, setEditScope] = useState("single");
 
+  // --- Initialization ---
   useEffect(() => {
     if (editingTask) {
-      
+      // Edit Mode: Populate form with existing data
       
       setFormData({
         ...editingTask,
@@ -50,10 +61,12 @@ const TaskModal = ({ requestDelete }) => {
         groupId: editingTask.groupId || null
       });
 
-      
+      // Derive All-Day status from presence of time
       setIsAllDay(!editingTask.time);
       setEditScope("single");
     } else {
+      // Create Mode: Default values
+      // Default date is set to tomorrow for better UX
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       setFormData({
@@ -72,23 +85,26 @@ const TaskModal = ({ requestDelete }) => {
     }
   }, [editingTask, isOpen]);
 
+  // --- Submission Handler ---
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    
+    // Prepare final payload
     const finalData = { 
         ...formData,
         time: isAllDay ? "" : formData.time 
     };
 
     if (editingTask) {
-      
+      // Update existing
+      // We pass `editScope` so DataContext knows whether to update siblings
       updateEvent({ 
           ...editingTask, 
           ...finalData,
           editScope 
       });
     } else {
+      // Create new
       addEvent(finalData);
     }
     closeModal("task");
@@ -97,13 +113,14 @@ const TaskModal = ({ requestDelete }) => {
   const handleDeleteClick = () => {
     if (!editingTask) return;
     
-    
+    // Determine deletion scope based on UI selection
     const shouldDeleteSeries = editScope === "series" && editingTask.groupId;
 
     if (requestDelete) {
-      
+      // Use the confirmation modal mechanism if provided
       requestDelete(() => deleteEvent(editingTask.id, shouldDeleteSeries, editingTask.groupId));
     } else {
+      // Fallback to browser confirm
       if (confirm(`Are you sure you want to delete this ${shouldDeleteSeries ? 'series' : 'task'}?`)) {
         deleteEvent(editingTask.id, shouldDeleteSeries, editingTask.groupId);
         closeModal("task");
@@ -189,7 +206,7 @@ const TaskModal = ({ requestDelete }) => {
             required
           />
           
-         
+          {/* Time Input with All Day Toggle */}
           <div className="space-y-1.5 relative">
             <div className="flex justify-between items-center">
                  <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Time</label>
@@ -245,7 +262,7 @@ const TaskModal = ({ requestDelete }) => {
           />
         </div>
 
-        
+        {/* Recurrence Settings (Create Mode) */}
         {!editingTask ? (
            <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-100 dark:border-slate-600/50 space-y-3">
                <div className="flex items-center gap-2">
@@ -272,7 +289,7 @@ const TaskModal = ({ requestDelete }) => {
                </div>
            </div>
         ) : (
-            
+            // Edit Scope (Edit Mode for Series)
             editingTask.groupId && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-100 dark:border-amber-900/30">
                     <div className="flex items-center gap-2 mb-2">
