@@ -6,8 +6,9 @@ export const STORAGE_KEYS = {
   VIEW: "hw_view",
   CAL_MODE: "hw_cal_mode",
 };
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://planner.adangarcia.com/backend";
+
+export const API_BASE_URL ="https://planner.adangarcia.com/backend";
+
 export const PALETTE = [
   "#0984e3",
   "#d63031",
@@ -29,8 +30,8 @@ export const EVENT_TYPES = [
   "Discussion",
   "Assignment",
 ];
+
 export const initialEvents = [];
-
 export const initialClassColors = {};
-
 export const initialHiddenClasses = [];
+

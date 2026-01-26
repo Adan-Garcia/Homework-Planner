@@ -1,6 +1,44 @@
-import ICAL from "ical.js"; // Requires npm install ical.js
 import { determineClass, determineType } from "./helpers";
+import { API_BASE_URL } from "./constants";
 
+/**
+ * Fetch Remote ICS
+ * * Fetches an ICS file from a remote URL via our backend proxy.
+ * * This is necessary to avoid CORS errors when fetching directly from client.
+ */
+export const fetchRemoteICS = async (url) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/proxy/ical?url=${encodeURIComponent(url)}`);
+    
+    if (!response.ok) {
+      // Try to parse error from backend
+      try {
+        const errData = await response.json();
+        throw new Error(errData.error || "Failed to fetch calendar");
+      } catch (e) {
+        throw new Error(`Server Error: ${response.status}`);
+      }
+    }
+
+    return await response.text();
+  } catch (error) {
+    console.error("ICS Fetch Error:", error);
+    throw error; 
+  }
+};
+
+/**
+ * Process ICS Content
+ * * Orchestrates the parsing of ICS text data using a Web Worker.
+ * * Uses a worker to keep the UI responsive during heavy parsing of large calendar files.
+ * * Also assigns random colors to newly discovered classes.
+ * * @param {string} text - Raw ICS file content.
+ * @param {Object} currentClassColors - Existing class->color map.
+ * @param {Function} handleSetClassColors - State setter for colors.
+ * @param {boolean} isAuthorized - Are we connected to a sync room?
+ * @param {Function} bulkAddEvents - Function to add parsed events to state.
+ * @param {Function} setEvents - Local state setter (fallback if not authorized).
+ */
 export const processICSContent = (
   text,
   currentClassColors,
@@ -9,79 +47,55 @@ export const processICSContent = (
   bulkAddEvents,
   setEvents,
 ) => {
-  try {
-    // 1. Parse using Library
-    const jcalData = ICAL.parse(text);
-    const vcalendar = new ICAL.Component(jcalData);
-    const vevents = vcalendar.getAllSubcomponents("vevent");
-
-    const newEvents = [];
-    const foundClasses = new Set();
-
-    vevents.forEach((vevent) => {
-      const event = new ICAL.Event(vevent);
-
-      const summary = event.summary || "";
-      const description = event.description || "";
-      const location = event.location || "";
-      const startDate = event.startDate;
-
-      // Skip if no date
-      if (!startDate) return;
-
-      const type = determineType(summary, description);
-      const className = determineClass(location, summary);
-
-      if (className) foundClasses.add(className);
-
-      newEvents.push({
-        id: crypto.randomUUID(), // Secure ID
-        title: summary,
-        description: description,
-        location: location,
-        // Convert ICAL date to YYYY-MM-DD
-        date: startDate.toJSDate().toISOString().split("T")[0],
-        time: startDate.isDate
-          ? null
-          : startDate.toJSDate().toTimeString().substring(0, 5),
-        type: type,
-        class: className || "General",
-        completed: false,
-      });
+  return new Promise((resolve) => {
+    // Initialize Web Worker for background processing
+    const worker = new Worker(new URL('../workers/ics.worker.js', import.meta.url), {
+      type: 'module',
     });
 
-    // Color Logic (Same as before)
-    let finalColors = { ...currentClassColors };
-    const defaultPalette = [
-      "#3b82f6",
-      "#10b981",
-      "#f59e0b",
-      "#ef4444",
-      "#8b5cf6",
-      "#ec4899",
-      "#6366f1",
-      "#14b8a6",
-    ];
-    let colorIndex = Object.keys(finalColors).length;
+    worker.postMessage(text);
 
-    foundClasses.forEach((cls) => {
-      if (!finalColors[cls]) {
-        finalColors[cls] = defaultPalette[colorIndex % defaultPalette.length];
-        colorIndex++;
+    worker.onmessage = (e) => {
+      const { success, events, classes, error } = e.data;
+      
+      if (!success) {
+        worker.terminate();
+        resolve({ success: false, error });
+        return;
       }
-    });
 
-    handleSetClassColors(finalColors);
+      // Assign colors to any newly found classes
+      let finalColors = { ...currentClassColors };
+      const defaultPalette = [
+        "#3b82f6", "#10b981", "#f59e0b", "#ef4444", 
+        "#8b5cf6", "#ec4899", "#6366f1", "#14b8a6",
+      ];
+      let colorIndex = Object.keys(finalColors).length;
 
-    if (isAuthorized) {
-      bulkAddEvents(newEvents);
-    } else {
-      setEvents((prev) => [...prev, ...newEvents]);
-    }
+      classes.forEach((cls) => {
+        if (!finalColors[cls]) {
+          finalColors[cls] = defaultPalette[colorIndex % defaultPalette.length];
+          colorIndex++;
+        }
+      });
 
-    return { success: true, count: newEvents.length };
-  } catch (e) {
-    console.error("ICS Parse Error", e);
-    return { success: false, error: "Failed to parse ICS file. Is it valid?" };
-  }
+      handleSetClassColors(finalColors);
+
+      // Add the parsed events to the application state
+      if (isAuthorized) {
+        bulkAddEvents(events);
+      } else {
+        setEvents((prev) => [...prev, ...events]);
+      }
+
+      worker.terminate();
+      resolve({ success: true, count: events.length });
+    };
+
+    worker.onerror = (err) => {
+      console.error("Worker Error", err);
+      worker.terminate();
+      resolve({ success: false, error: "Worker failed to process file." });
+    };
+  });
 };

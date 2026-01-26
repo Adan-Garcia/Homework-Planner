@@ -113,14 +113,13 @@ export const formatTime = (timeStr) => {
 };
 
 export const addDaysToDate = (dateStr, days) => {
-  // Safe date addition handling timezones correctly
   const date = new Date(dateStr + "T00:00:00");
   const newDate = addDays(date, days);
   return format(newDate, "yyyy-MM-dd");
 };
 
 export const getWeekDates = (baseDate) => {
-  const start = startOfWeek(baseDate); // defaults to Sunday start
+  const start = startOfWeek(baseDate); 
   const days = [];
   for (let i = 0; i < 7; i++) {
     days.push(format(addDays(start, i), "yyyy-MM-dd"));
@@ -196,3 +195,41 @@ export const getContrastColor = (hexcolor) => {
   const yiq = (r * 299 + g * 587 + b * 114) / 1000;
   return yiq >= 128 ? "#000000" : "#ffffff";
 };
+
+
+export const compareTasks = (a, b) => {
+  const dateDiff = new Date(a.date) - new Date(b.date);
+  if (dateDiff !== 0) return dateDiff;
+
+  
+  
+  const getPriorityWeight = (p) => {
+    if (p === "High") return 3;
+    if (p === "Medium" || p === "Normal") return 2;
+    return 1;
+  };
+  
+  const pA = getPriorityWeight(a.priority);
+  const pB = getPriorityWeight(b.priority);
+  
+  
+  if (pA !== pB) return pB - pA;
+
+  
+  
+  
+  if (!a.time && b.time) return -1;
+  if (a.time && !b.time) return 1;
+  
+  
+  if (a.time && b.time) {
+      const timeDiff = a.time.localeCompare(b.time);
+      if (timeDiff !== 0) return timeDiff;
+  }
+
+  
+  return a.title.localeCompare(b.title);
+};
+
+
+export const urlRegex = /(https?:\/\/[^\s]+)/g;

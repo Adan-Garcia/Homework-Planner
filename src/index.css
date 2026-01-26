@@ -1,17 +1,134 @@
 @import "tailwindcss";
 
-/* Custom Scrollbar Styling */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+@theme {
+  --breakpoint-md: 900px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+@custom-variant dark (&:where(.dark, .dark *));
+@layer base {
+  html, body, #root {
+    height: 100dvh;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    
+    @apply font-sans antialiased text-slate-900 dark:text-slate-50 bg-[#F2F2F7] dark:bg-[#100310];
+  }
 }
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  border-radius: 20px;
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  
+  
+  
+  .mac-glass {
+    @apply bg-white/60 dark:bg-[#1c1c1e]/60 backdrop-blur-3xl border border-white/40 dark:border-purple-950/1 shadow-2xl shadow-black/5 dark:shadow-purple-900/20;
+  }
+
+  
+  .mac-glass-heavy {
+    @apply bg-white/80 dark:bg-[#2c2c2e]/80 backdrop-blur-3xl border border-white/50 dark:border-purple-400/50 shadow-xl dark:shadow-purple-900/30;
+  }
+
+  
+  .mac-input-glass {
+    @apply bg-black/5 dark:bg-white/10 border-transparent focus:bg-white/50 dark:focus:bg-black/50 focus:border-purple-500/50 transition-all duration-300;
+  }
+
+  
+  .rounded-squircle {
+    border-radius: 1.5rem; 
+    @supports (mask-image: paint(squircle)) {
+      --squircle-radius: 24px;
+      mask-image: paint(squircle);
+    }
+  }
 }
-.dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #475569;
+
+@layer components {
+  
+  .layout-card-open { @apply min-w-[300px]; }
+  .layout-card-closed { @apply min-w-[200px]; }
+  .layout-editor-height { @apply h-[500px]; }
+
+  
+  .segmented-item-active {
+    @apply bg-white dark:bg-[#636366] text-black dark:text-white shadow-sm font-semibold;
+  }
+  .segmented-item-inactive {
+    @apply text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10;
+  }
+
+  
+  .surface-main {
+    @apply bg-transparent; 
+  }
+  .surface-card {
+    
+    @apply bg-white/60 dark:bg-[#1c1c1e]/60 backdrop-blur-3xl border border-white/40 dark:border-purple-400/30 shadow-2xl shadow-black/5 dark:shadow-purple-900/20 rounded-[20px] transition-all duration-300;
+  }
+  .surface-card-hover {
+    @apply hover:bg-white/70 dark:hover:bg-[#2c2c2e]/70 hover:scale-[1.02] hover:shadow-lg dark:hover:shadow-purple-500/20 dark:hover:border-purple-300/50 transition-all duration-300 ease-out;
+  }
+  .surface-input {
+    
+    @apply bg-black/5 dark:bg-white/10 border-transparent focus:bg-white/50 dark:focus:bg-black/50 focus:border-purple-500/50 transition-all duration-300 rounded-xl;
+  }
+  .surface-modal {
+    
+    @apply bg-white/80 dark:bg-[#2c2c2e]/80 backdrop-blur-3xl border border-white/50 dark:border-purple-400/50 shadow-xl dark:shadow-purple-900/30 rounded-[24px];
+  }
+
+  
+  .text-primary { @apply text-black dark:text-white; }
+  .text-secondary { @apply text-slate-500 dark:text-[#98989d]; }
+  .text-heading { @apply text-sm font-semibold tracking-tight text-black dark:text-white; }
+  
+  
+  .btn-base {
+    @apply flex items-center justify-center gap-2 rounded-full text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  
+  .btn-primary {
+    @apply bg-[#007AFF] text-white hover:bg-[#0062CC] shadow-lg shadow-blue-500/30 border border-transparent;
+  }
+  
+  .btn-secondary {
+    @apply bg-white/50 dark:bg-white/10 text-slate-900 dark:text-white border border-black/5 dark:border-purple-500/30 hover:bg-white dark:hover:bg-white/20 backdrop-blur-md;
+  }
+  
+  .btn-ghost {
+    @apply text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10;
+  }
+  
+  .btn-danger-soft {
+    @apply bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20;
+  }
+
+  
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-black/10 dark:bg-white/10 rounded-full;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-black/20 dark:bg-white/20;
+  }
 }

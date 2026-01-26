@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Lock, LogOut, WifiOff } from "lucide-react";
-import Modal from "../ui/Modal";
-import { useAuth } from "../../context/AuthContext";
+import Modal from "../../ui/Modal";
+import { useAuth } from "../../../context/AuthContext";
 
 const ReLoginModal = ({ isOpen, onClose, onOffline }) => {
   const { roomId, setRoomPassword, disconnectRoom, authError } = useAuth();
@@ -11,8 +11,6 @@ const ReLoginModal = ({ isOpen, onClose, onOffline }) => {
     e.preventDefault();
     if (password.trim()) {
       setRoomPassword(password);
-      // The modal remains open until 'isAuthorized' changes in App.jsx,
-      // or we can show a loading state here if we passed it down.
     }
   };
 
