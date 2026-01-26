@@ -1,88 +1,16 @@
-import React, { useMemo,useState, useEffect } from "react";
-import { Check, Clock, Calendar, AlertCircle, GripVertical, X, Filter, Circle } from "lucide-react";
+import React, { useMemo, useState, useEffect } from "react";
+import { Check, Clock, Calendar, AlertCircle, GripVertical, X, Filter, Circle, ChevronDown } from "lucide-react";
 import { isToday, isTomorrow, isPast, parseISO } from "date-fns";
 import Input from "../../ui/Input";
 import Button from "../../ui/Button"; 
 import { useUI } from "../../../context/PlannerContext"; 
 import { useDragDrop } from "../../../context/DragDropContext";
-const Sidebar = ({
-  filteredEvents = [],
-  classColors = {},
-  toggleTask,
-  openEditTaskModal,
-  searchQuery,
-  setSearchQuery,
-  activeTypeFilter,
-  setActiveTypeFilter,
-  hiddenClasses = [],
-  setHiddenClasses = () => {},
-  showCompleted,
-  setShowCompleted,
-  hideOverdue,
-}) => {
-  const { draggedEventId, handleDragStart, handleDragOver, handleSidebarDrop } = useDragDrop();
-  const [localSearch, setLocalSearch] = useState(searchQuery);
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchQuery(localSearch);
-    }, 300);
 
-    return () => clearTimeout(handler);
-  }, [localSearch, setSearchQuery]);
-  const { mobileMenuOpen, setMobileMenuOpen } = useUI(); 
+// --- Extracted TaskItem Component ---
+const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
+  const { draggedEventId, handleDragStart } = useDragDrop();
 
-  const groupedTasks = useMemo(() => {
-    const groups = { overdue: [], today: [], tomorrow: [], upcoming: [] };
-    
-    // Guard clause in case filteredEvents is null/undefined during initial load
-    if (!filteredEvents || !Array.isArray(filteredEvents)) return groups;
-
-    filteredEvents.forEach((task) => {
-      if (!task.date) return;
-      // Safety check for date string validity
-      let taskDate;
-      try {
-        taskDate = parseISO(task.date);
-      } catch (e) {
-        return;
-      }
-      
-      // If hiding completed tasks globally, skip
-      if (task.completed && !showCompleted) return;
-
-      const isTaskOverdue = isPast(taskDate) && !isToday(taskDate);
-      
-      // Logic Fix:
-      // 1. Overdue: Only show if NOT completed (and strictly past)
-      // 2. Today: Show regardless of completion (if showCompleted is true)
-      // 3. Tomorrow: Show regardless of completion
-      // 4. Upcoming: Show regardless of completion, BUT exclude past completed tasks that might slip through
-
-      if (isTaskOverdue) {
-        if (!task.completed) {
-           groups.overdue.push(task);
-        }
-        // If it is overdue AND completed, we implicitly hide it from 'overdue' group.
-        // And we must ensure it doesn't fall through to 'upcoming'.
-        return; 
-      }
-      
-      if (isToday(taskDate)) {
-        groups.today.push(task);
-      } else if (isTomorrow(taskDate)) {
-        groups.tomorrow.push(task);
-      } else {
-        // This is the upcoming bucket (future dates beyond tomorrow)
-        // Since we already handled 'isTaskOverdue' (past dates), this block implies future dates.
-        // So we can safely push here.
-        groups.upcoming.push(task);
-      }
-    });
-    return groups;
-  }, [filteredEvents, showCompleted]);
-
-  // --- Task Item Component ---
-  const TaskItem = ({ task }) => (
+  return (
     <div
       draggable={!task.completed}
       onDragStart={(e) => handleDragStart(e, task.id)}
@@ -142,7 +70,6 @@ const Sidebar = ({
                 High
              </span>
            )}
-           {/* Show repeating icon if needed, though data might not have it explicitly here unless grouped */}
         </div>
       </div>
       
@@ -153,36 +80,152 @@ const Sidebar = ({
       )}
     </div>
   );
+};
 
-  // Default items to empty array to prevent crash reading .length of undefined
-  const DropZone = ({ title, groupKey, icon: Icon, items = [], isDanger, accentColor = "text-slate-500" }) => (
+// --- Extracted DropZone Component (Collapsible) ---
+const DropZone = ({ 
+  title, 
+  groupKey, 
+  icon: Icon, 
+  items = [], 
+  isDanger, 
+  accentColor = "text-slate-500",
+  toggleTask,
+  openEditTaskModal,
+  classColors
+}) => {
+  const { draggedEventId, handleDragOver, handleSidebarDrop } = useDragDrop();
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
     <div
       onDragOver={handleDragOver}
       onDrop={(e) => handleSidebarDrop(e, groupKey)}
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-2"
     >
-      <div className={`flex items-center justify-between px-2 ${isDanger ? "text-red-500" : "text-secondary"}`}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`
+            flex items-center justify-between px-2 py-1.5 -mx-2 rounded-xl transition-colors group select-none
+            hover:bg-white/40 dark:hover:bg-white/5 
+            ${isDanger ? "text-red-500" : "text-secondary"}
+        `}
+      >
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
           <Icon className={`w-4 h-4 ${isDanger ? "text-red-500" : accentColor}`} />
           {title}
         </div>
-        <span className="bg-black/5 dark:bg-white/10 text-secondary px-2.5 py-0.5 rounded-full text-[10px] font-bold">
-            {items ? items.length : 0}
-        </span>
-      </div>
+        <div className="flex items-center gap-2">
+            <span className={`
+                px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-colors
+                ${isDanger 
+                    ? "bg-red-500/10 text-red-600" 
+                    : "bg-black/5 dark:bg-white/10 text-secondary"
+                }
+            `}>
+                {items ? items.length : 0}
+            </span>
+            <ChevronDown className={`w-3.5 h-3.5 opacity-50 transition-transform duration-200 ${isOpen ? "rotate-0" : "-rotate-90"}`} />
+        </div>
+      </button>
       
-      <div className={`flex flex-col gap-3 min-h-[20px] transition-all rounded-3xl ${draggedEventId ? "p-3 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-dashed border-blue-200 dark:border-blue-800" : ""}`}>
+      {/* Collapsible Content */}
+      <div className={`
+        flex flex-col gap-3 transition-all duration-300 origin-top
+        ${isOpen ? "opacity-100 max-h-[1000px]" : "opacity-0 max-h-0 overflow-hidden"}
+        ${draggedEventId ? "min-h-[20px] rounded-3xl" : ""}
+        ${draggedEventId && isOpen ? "p-3 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-dashed border-blue-200 dark:border-blue-800" : ""}
+      `}>
         {items && items.map((task) => (
-          <TaskItem key={task.id} task={task} />
+          <TaskItem 
+            key={task.id} 
+            task={task} 
+            toggleTask={toggleTask}
+            openEditTaskModal={openEditTaskModal}
+            classColors={classColors}
+          />
         ))}
-        {(!items || items.length === 0) && (
-          <div className="text-center py-6 text-xs text-slate-300 dark:text-slate-600 italic">
+        {(!items || items.length === 0) && isOpen && (
+          <div className="text-center py-4 text-xs text-slate-300 dark:text-slate-600 italic">
             No tasks
           </div>
         )}
       </div>
     </div>
   );
+};
+
+// --- Main Sidebar Component ---
+const Sidebar = ({
+  filteredEvents = [],
+  classColors = {},
+  toggleTask,
+  openEditTaskModal,
+  searchQuery,
+  setSearchQuery,
+  activeTypeFilter,
+  setActiveTypeFilter,
+  hiddenClasses = [],
+  setHiddenClasses = () => {},
+  showCompleted,
+  setShowCompleted,
+  hideOverdue,
+}) => {
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchQuery(localSearch);
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [localSearch, setSearchQuery]);
+  
+  const { mobileMenuOpen, setMobileMenuOpen } = useUI(); 
+
+  const groupedTasks = useMemo(() => {
+    const groups = { overdue: [], today: [], tomorrow: [], upcoming: [] };
+    
+    // Guard clause in case filteredEvents is null/undefined during initial load
+    if (!filteredEvents || !Array.isArray(filteredEvents)) return groups;
+
+    filteredEvents.forEach((task) => {
+      if (!task.date) return;
+      // Safety check for date string validity
+      let taskDate;
+      try {
+        taskDate = parseISO(task.date);
+      } catch (e) {
+        return;
+      }
+      
+      // If hiding completed tasks globally, skip
+      if (task.completed && !showCompleted) return;
+
+      const isTaskOverdue = isPast(taskDate) && !isToday(taskDate);
+      
+      // Logic Fix:
+      // 1. Overdue: Only show if NOT completed (and strictly past)
+      // 2. Today: Show regardless of completion (if showCompleted is true)
+      // 3. Tomorrow: Show regardless of completion
+      // 4. Upcoming: Show regardless of completion
+      
+      if (isTaskOverdue) {
+        if (!task.completed) {
+           groups.overdue.push(task);
+        }
+        return; 
+      }
+      
+      if (isToday(taskDate)) {
+        groups.today.push(task);
+      } else if (isTomorrow(taskDate)) {
+        groups.tomorrow.push(task);
+      } else {
+        groups.upcoming.push(task);
+      }
+    });
+    return groups;
+  }, [filteredEvents, showCompleted]);
 
   return (
     <>
@@ -251,7 +294,7 @@ const Sidebar = ({
             </Button>
           </div>
 
-          {/* RESTORED: Class Filters */}
+          {/* Class Filters */}
           <div className="pt-2 border-t border-black/5 dark:border-white/5">
             <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
               <button
@@ -295,7 +338,7 @@ const Sidebar = ({
         </div>
 
         {/* Task List Container */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-8 pb-32 mask-gradient-b">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 pb-32 mask-gradient-b">
           
           {(!hideOverdue && groupedTasks.overdue && groupedTasks.overdue.length > 0) && (
             <DropZone 
@@ -304,6 +347,9 @@ const Sidebar = ({
               icon={AlertCircle} 
               items={groupedTasks.overdue} 
               isDanger 
+              toggleTask={toggleTask}
+              openEditTaskModal={openEditTaskModal}
+              classColors={classColors}
             />
           )}
 
@@ -313,6 +359,9 @@ const Sidebar = ({
             icon={Clock} 
             items={groupedTasks.today} 
             accentColor="text-blue-500"
+            toggleTask={toggleTask}
+            openEditTaskModal={openEditTaskModal}
+            classColors={classColors}
           />
 
           <DropZone 
@@ -320,7 +369,10 @@ const Sidebar = ({
             groupKey="tomorrow" 
             icon={Calendar} 
             items={groupedTasks.tomorrow}
-            accentColor="text-purple-500" 
+            accentColor="text-purple-500"
+            toggleTask={toggleTask}
+            openEditTaskModal={openEditTaskModal}
+            classColors={classColors}
           />
 
           <DropZone 
@@ -328,6 +380,9 @@ const Sidebar = ({
             groupKey="upcoming"
             icon={Calendar}
             items={groupedTasks.upcoming}
+            toggleTask={toggleTask}
+            openEditTaskModal={openEditTaskModal}
+            classColors={classColors}
           />
         </div>
       </aside>

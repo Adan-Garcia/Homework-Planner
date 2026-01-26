@@ -1,5 +1,26 @@
-
 import { determineClass, determineType } from "./helpers";
+import { API_BASE_URL } from "./constants";
+
+export const fetchRemoteICS = async (url) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/proxy/ical?url=${encodeURIComponent(url)}`);
+    
+    if (!response.ok) {
+      // Try to parse error message from backend
+      try {
+        const errData = await response.json();
+        throw new Error(errData.error || "Failed to fetch calendar");
+      } catch (e) {
+        throw new Error(`Server Error: ${response.status}`);
+      }
+    }
+
+    return await response.text();
+  } catch (error) {
+    console.error("ICS Fetch Error:", error);
+    throw error; // Re-throw to be handled by the UI
+  }
+};
 
 export const processICSContent = (
   text,

@@ -1,9 +1,11 @@
-import React, { useRef } from "react";
-import { Upload, FileJson, FileCode, Download, Trash2, AlertTriangle } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Upload, FileJson, FileCode, Download, Trash2, AlertTriangle, Link as LinkIcon, Loader2 } from "lucide-react";
 import { useData } from "../../../context/DataContext";
 
 const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) => {
-  const { processICSContent, importJsonData } = useData();
+  const { processICSContent, importJsonData, importICSFromUrl } = useData();
+  const [url, setUrl] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const icsInputRef = useRef(null);
   const jsonInputRef = useRef(null);
 
@@ -27,12 +29,55 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
     e.target.value = "";
   };
 
+  const handleUrlImport = async () => {
+    if (!url) return;
+    setIsLoading(true);
+    try {
+        const result = await importICSFromUrl(url);
+        if (result.success) {
+            alert(`Successfully added ${result.count} events.`);
+            setUrl("");
+            onCloseModal();
+        } else {
+            alert(result.error || "Failed to import from URL");
+        }
+    } catch(e) {
+        alert("An error occurred during import.");
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
+      <div className="space-y-4">
          <h4 className="px-1 text-heading mb-2">Import / Export</h4>
          
-         <div className="grid grid-cols-1 gap-2">
+         {/* URL Import */}
+         <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-wider font-semibold text-secondary px-1">
+                Import from URL
+            </label>
+            <div className="flex gap-2">
+                <input 
+                    type="url" 
+                    value={url} 
+                    onChange={(e) => setUrl(e.target.value)} 
+                    placeholder="https://canvas.instructure.com/feed/..." 
+                    className="input-base flex-1 text-sm"
+                />
+                <button 
+                    onClick={handleUrlImport}
+                    disabled={!url || isLoading}
+                    className="btn-base btn-primary shrink-0 w-10 flex items-center justify-center"
+                    title="Import Calendar from URL"
+                >
+                    {isLoading ? <Loader2 className="icon-xs animate-spin" /> : <LinkIcon className="icon-xs" />}
+                </button>
+            </div>
+         </div>
+
+         <div className="grid grid-cols-1 gap-2 pt-2 border-t border-divider">
             {/* Import ICS */}
             <input
               type="file"

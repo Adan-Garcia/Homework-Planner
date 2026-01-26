@@ -12,7 +12,7 @@ import { useAuth } from "./AuthContext.jsx";
 import { useSocketSync } from "../hooks/useSocketSync.js";
 import { STORAGE_KEYS, PALETTE } from "../utils/constants.js";
 import { generateICS } from "../utils/helpers.js";
-import { processICSContent } from "../utils/icsHelpers.js";
+import { processICSContent, fetchRemoteICS } from "../utils/icsHelpers.js";
 
 const DataContext = createContext();
 
@@ -343,6 +343,26 @@ export const DataProvider = ({ children }) => {
     [classColors, handleSetClassColors, isAuthorized, bulkAddEvents],
   );
 
+  // New function to handle URL imports via backend proxy
+  const importICSFromUrl = useCallback(async (url) => {
+    try {
+      const text = await fetchRemoteICS(url);
+      if (text) {
+        return processICSContent(
+          text,
+          classColors,
+          handleSetClassColors,
+          isAuthorized,
+          bulkAddEvents,
+          setEvents
+        );
+      }
+      return { success: false, error: "No content received" };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+  }, [classColors, handleSetClassColors, isAuthorized, bulkAddEvents]);
+
   const resetAllData = useCallback(() => {
     setEvents([]);
     setClassColors({});
@@ -370,6 +390,7 @@ export const DataProvider = ({ children }) => {
       importJsonData,
       exportICS,
       processICSContent: handleProcessICS,
+      importICSFromUrl, // Exported here
       resetAllData,
       isAuthorized,
     }),
@@ -390,6 +411,7 @@ export const DataProvider = ({ children }) => {
       importJsonData,
       exportICS,
       handleProcessICS,
+      importICSFromUrl,
       resetAllData,
       isAuthorized,
     ],

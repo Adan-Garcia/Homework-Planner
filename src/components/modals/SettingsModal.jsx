@@ -27,9 +27,10 @@ const SettingsModal = ({
 
   const tabs = [
     { id: "classes", label: "Classes", icon: BookOpen },
-    { id: "data", label: "Data & Sync", icon: Database },
-    { id: "sync", label: "Sync", icon: RefreshCw },
     { id: "tools", label: "Tools", icon: Wrench }, // RESTORED
+    { id: "data", label: "Data", icon: Database },
+    { id: "sync", label: "Sync", icon: RefreshCw },
+    
   ];
 
   const renderContent = () => {
