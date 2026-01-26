@@ -1,16 +1,16 @@
 import React from "react";
 import { Users, LogOut } from "lucide-react";
 import { useUI } from "../../../context/PlannerContext";
+import { useAuth } from "../../../context/AuthContext";
 import { useData } from "../../../context/DataContext";
 
 const SyncRoomContent = () => {
-  const { roomId, setRoomId, isHost, peers, setRoomPassword, syncError } =
-    useData();
+  const { roomId, isNewRoom, authError, disconnectRoom } = useAuth();
+  const { peerCount } = useData(); 
   const { setView, closeModal } = useUI();
 
   const handleLeaveAndSetup = () => {
-    setRoomId(null);
-    setRoomPassword("");
+    disconnectRoom();
     setView("setup");
     closeModal("settings");
   };
@@ -22,9 +22,9 @@ const SyncRoomContent = () => {
 
   return (
     <div className="space-y-3">
-      {syncError && (
+      {authError && (
         <div className="p-2 rounded-lg text-xs status-error">
-          {syncError}
+          {authError}
         </div>
       )}
 
@@ -40,14 +40,14 @@ const SyncRoomContent = () => {
               <div className="flex items-center gap-1">
                 <div
                   className={`w-2 h-2 rounded-full ${
-                    isHost ? "status-dot-host" : "status-dot-peer"
+                    isNewRoom ? "status-dot-host" : "status-dot-peer"
                   }`}
                 />
-                <span>Role: {isHost ? "Host" : "Peer"}</span>
+                <span>Role: {isNewRoom ? "Host" : "Peer"}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Users className="icon-xs" />
-                <span>Peers connected: {peers ? peers.length : 0}</span>
+                <span>Peers connected: {peerCount || 0}</span>
               </div>
             </div>
           </div>

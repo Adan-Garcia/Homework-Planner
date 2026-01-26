@@ -67,6 +67,7 @@ export const DataProvider = ({ children }) => {
     syncColors,
     bulkAddEvents: serverBulkAdd,
     clearAllEvents: serverClear,
+    peerCount, // 1. Destructure peerCount from the hook
   } = useSocketSync(
     roomId,
     authToken,
@@ -176,7 +177,6 @@ export const DataProvider = ({ children }) => {
     [isAuthorized, serverUpdate],
   );
 
-  // --- UPDATED: deleteEvent now handles series deletion ---
   const deleteEvent = useCallback(
     (id, deleteSeries = false, groupId = null) => {
       if (deleteSeries && groupId) {
@@ -390,9 +390,10 @@ export const DataProvider = ({ children }) => {
       importJsonData,
       exportICS,
       processICSContent: handleProcessICS,
-      importICSFromUrl, // Exported here
+      importICSFromUrl, 
       resetAllData,
       isAuthorized,
+      peerCount, // 2. Add peerCount to value object
     }),
     [
       events,
@@ -414,6 +415,7 @@ export const DataProvider = ({ children }) => {
       importICSFromUrl,
       resetAllData,
       isAuthorized,
+      peerCount, // 3. Add peerCount to dependencies
     ],
   );
 
