@@ -7,8 +7,7 @@ export const STORAGE_KEYS = {
   CAL_MODE: "hw_cal_mode",
 };
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "https://planner.adangarcia.com/backend";
+export const API_BASE_URL ="https://planner.adangarcia.com/backend";
 
 export const PALETTE = [
   "#0984e3",
