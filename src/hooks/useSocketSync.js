@@ -125,7 +125,10 @@ export const useSocketSync = (
     newSocket.on("event:remove", handleEventRemove);
     newSocket.on("meta:sync", handleMetaSync);
     newSocket.on("room:count", handleRoomCount);
-    
+    newSocket.on("connect", () => {
+      console.log("[Sync] Connected, joining room:", roomId);
+      newSocket.emit("join", roomId);
+    });
     // Connect now that listeners are ready
     newSocket.connect();
     setSocket(newSocket);
