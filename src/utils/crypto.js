@@ -1,12 +1,27 @@
 /**
  * Cryptographic Utility Module
- * * This module implements the "Zero-Knowledge" security architecture using the Web Crypto API.
- * It handles key derivation, encryption, and decryption locally on the client device.
- * * Core Concepts:
- * 1. PBKDF2: Used to derive strong cryptographic keys from the user's password.
- * 2. AES-GCM: Used for authenticated encryption of event data.
- * 3. Salt: Random data added to password hashing to prevent rainbow table attacks.
+ * 
+ * Implements zero-knowledge encryption using Web Crypto API.
+ * 
+ * **Architecture:**
+ * - PBKDF2: Derives strong keys from passwords (600k iterations)
+ * - AES-GCM: Authenticated encryption (prevents tampering)
+ * - Separate Keys: AUTH key for identity, DATA key for encryption
+ * 
+ * **Security Properties:**
+ * 1. Server never sees plaintext data or DATA key
+ * 2. Keys derived with high iteration count (brute-force resistant)
+ * 3. Unique IV for each encryption (prevents pattern analysis)
+ * 4. Authenticated encryption (detects tampering)
+ * 
+ * **Warning:** This module requires Web Crypto API support.
+ * The app checks for availability in main.jsx and shows error if missing.
+ * 
+ * @module crypto
  */
+
+import { PBKDF2_ITERATIONS } from "./constants.js";
+import logger from "./logger.js";
 
 /**
  * Derives a cryptographic key from a password and salt using PBKDF2.
@@ -41,7 +56,7 @@ export const deriveKey = async (password, salt, purpose) => {
       {
         name: "PBKDF2",
         salt: saltBuffer,
-        iterations: 600000, // High iteration count for resistance against brute-force
+        iterations: PBKDF2_ITERATIONS,
         hash: "SHA-256",
       },
       keyMaterial,
@@ -61,7 +76,7 @@ export const deriveKey = async (password, salt, purpose) => {
       {
         name: "PBKDF2",
         salt: saltBuffer,
-        iterations: 600000,
+        iterations: PBKDF2_ITERATIONS,
         hash: "SHA-256",
       },
       keyMaterial,
@@ -154,7 +169,7 @@ export const decryptEvent = async (encryptedData, key) => {
     }
     return parsed;
   } catch (e) {
-    console.error("Decryption failed", e);
+    logger.error("[Crypto] Decryption failed", e);
     // Graceful failure: return a placeholder "Locked" event so the UI doesn't crash
     return {
       id: encryptedData.id,

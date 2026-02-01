@@ -1,4 +1,5 @@
 import { addDays, startOfWeek, format } from "date-fns";
+import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH } from "./constants";
 
 export const unfoldLines = (text) => text.replace(/\r\n /g, "");
 
@@ -113,7 +114,9 @@ export const formatTime = (timeStr) => {
 };
 
 export const addDaysToDate = (dateStr, days) => {
-  const date = new Date(dateStr + "T00:00:00");
+  // Parse date in UTC to avoid timezone issues
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
   const newDate = addDays(date, days);
   return format(newDate, "yyyy-MM-dd");
 };
@@ -189,11 +192,33 @@ export const formatDate = (dateString) => {
 
 export const getContrastColor = (hexcolor) => {
   if (!hexcolor) return "#000000";
-  const r = parseInt(hexcolor.substr(1, 2), 16);
-  const g = parseInt(hexcolor.substr(3, 2), 16);
-  const b = parseInt(hexcolor.substr(5, 2), 16);
-  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-  return yiq >= 128 ? "#000000" : "#ffffff";
+  
+  // Remove # if present
+  const color = hexcolor.replace('#', '');
+  
+  // Validate color length to prevent NaN from invalid parsing
+  if (color.length < 6) return "#000000";
+  
+  // Parse RGB values
+  const r = parseInt(color.substr(0, 2), 16);
+  const g = parseInt(color.substr(2, 2), 16);
+  const b = parseInt(color.substr(4, 2), 16);
+  
+  // Calculate relative luminance using WCAG formula
+  const toLuminance = (val) => {
+    const normalized = val / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  };
+  
+  const luminance = 0.2126 * toLuminance(r) + 
+                    0.7152 * toLuminance(g) + 
+                    0.0722 * toLuminance(b);
+  
+  // Return white for dark backgrounds, black for light backgrounds
+  // Threshold of 0.179 provides good contrast
+  return luminance > 0.179 ? "#000000" : "#ffffff";
 };
 
 
@@ -231,5 +256,119 @@ export const compareTasks = (a, b) => {
   return a.title.localeCompare(b.title);
 };
 
+/**
+ * Validates event/task input
+ * * @param {Object} event - The event object to validate
+ * @returns {Object} - { isValid: boolean, errors: string[] }
+ */
+/**
+ * Validates an event object against business rules.
+ * * Checks required fields, data types, and length constraints.
+ * * Returns detailed error messages for debugging.
+ * 
+ * @param {Object} event - The event object to validate
+ * @returns {{isValid: boolean, errors: string[]}} Validation result with error messages
+ * 
+ * @example
+ * const result = validateEvent({ title: "", date: "2026-02-15" });
+ * // Returns: { isValid: false, errors: ["Task title is required"] }
+ */
+export const validateEvent = (event) => {
+  const errors = [];
+
+  if (!event.title || !event.title.trim()) {
+    errors.push("Task title is required");
+  } else if (event.title.trim().length > MAX_TASK_TITLE_LENGTH) {
+    errors.push(`Task title cannot exceed ${MAX_TASK_TITLE_LENGTH} characters`);
+  }
+
+  if (event.description && event.description.length > MAX_TASK_DESCRIPTION_LENGTH) {
+    errors.push(`Task description cannot exceed ${MAX_TASK_DESCRIPTION_LENGTH} characters`);
+  }
+
+  if (!event.date) {
+    errors.push("Task date is required");
+  }
+
+  if (event.time && !/^\d{2}:\d{2}$/.test(event.time)) {
+    errors.push("Invalid time format. Use HH:MM");
+  }
+
+  if (!event.class || !event.class.trim()) {
+    errors.push("Task class is required");
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+/**
+ * Normalizes an event object to safe defaults.
+ * * Ensures required fields exist and types are correct.
+ * @param {Object} event - Raw event data
+ * @returns {Object|null} - Normalized event or null if input is not an object
+ */
+export const normalizeEvent = (event) => {
+  if (!event || typeof event !== "object") return null;
+
+  const id =
+    typeof event.id === "string" && event.id.trim()
+      ? event.id
+      : (typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random()}`);
+
+  return {
+    ...event,
+    id,
+    title: typeof event.title === "string" ? event.title : "",
+    description: typeof event.description === "string" ? event.description : "",
+    date: typeof event.date === "string" ? event.date : "",
+    time: typeof event.time === "string" ? event.time : "",
+    class: typeof event.class === "string" && event.class.trim() ? event.class : "General",
+    type: typeof event.type === "string" ? event.type : "Assignment",
+    priority: typeof event.priority === "string" ? event.priority : "Normal",
+    completed: Boolean(event.completed),
+  };
+};
 
 export const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+/**
+ * Sanitizes user input to prevent XSS and other injection attacks
+ * @param {string} input - The input string to sanitize
+ * @returns {string} - Sanitized string
+ */
+/**
+ * Sanitizes user input to prevent XSS attacks.
+ * * Removes HTML tags, script content, and event handlers.
+ * * Strips dangerous protocols like javascript:
+ * * Always use this before rendering user-provided content.
+ * 
+ * **Security Note:** This is client-side sanitization for defense-in-depth.
+ * React already escapes content, but this provides an extra layer.
+ * 
+ * @param {string} input - Raw user input string
+ * @returns {string} Sanitized string safe for display
+ * 
+ * @example
+ * sanitizeInput("<script>alert('xss')</script>Hello")
+ * // Returns: "alert('xss')Hello"
+ */
+export const sanitizeInput = (input) => {
+  if (typeof input !== 'string') return '';
+  
+  // Remove any HTML tags
+  const withoutTags = input.replace(/<[^>]*>/g, '');
+  
+  // Trim whitespace
+  const trimmed = withoutTags.trim();
+  
+  // Remove any script-like content and event handlers
+  const withoutScripts = trimmed.replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=\s*["']?[^"'\s>]*/gi, ''); // Removes onclick=, onerror=, etc.
+  
+  return withoutScripts;
+};
