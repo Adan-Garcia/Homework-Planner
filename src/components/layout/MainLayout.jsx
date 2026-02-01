@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import Button from "../ui/Button";
+import ErrorBoundary from "../ui/ErrorBoundary";
 
 /**
  * MainLayout Component
@@ -65,6 +66,8 @@ const MainLayout = ({ children }) => {
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="md:hidden p-2 text-secondary hover:text-primary rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -92,6 +95,8 @@ const MainLayout = ({ children }) => {
                     ${calendarView === v.id ? "segmented-item-active shadow-md" : "segmented-item-inactive"}
                     ${v.hiddenOnMobile ? "hidden md:flex" : "flex"} 
                   `}
+                  aria-label={`Switch to ${v.label} view`}
+                  aria-pressed={calendarView === v.id}
                 >
                   <v.icon className={`w-4 h-4 sm:mr-1.5 ${calendarView === v.id ? "text-[#007AFF] dark:text-white" : "opacity-60"}`} />
                   <span className="hidden sm:inline truncate">{v.label}</span>
@@ -107,6 +112,8 @@ const MainLayout = ({ children }) => {
                 variant="ghost"
                 onClick={() => setDarkMode(prev => !prev)}
                 className="w-8 h-8 sm:w-9 sm:h-9 !p-0 rounded-full"
+                aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
               >
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </Button>
@@ -115,6 +122,8 @@ const MainLayout = ({ children }) => {
                 variant="ghost"
                 onClick={() => openModal("settings")}
                 className="w-8 h-8 sm:w-9 sm:h-9 !p-0 rounded-full"
+                aria-label="Open settings (Ctrl+S)"
+                title="Settings (Ctrl+S)"
               >
                 <Settings className="w-4 h-4" />
               </Button>
@@ -124,6 +133,8 @@ const MainLayout = ({ children }) => {
               variant="primary"
               onClick={() => openTaskModal(null)}
               className="!rounded-full !px-3 sm:!px-4 !h-8 sm:!h-9 shadow-lg shadow-blue-500/30 hover:scale-105 active:scale-95 transition-transform"
+              aria-label="Create new task (Ctrl+N)"
+              title="New Task (Ctrl+N)"
             >
               <Plus className="w-4 h-4 sm:mr-1.5" />
               <span className="hidden sm:inline">New Task</span>
@@ -134,7 +145,9 @@ const MainLayout = ({ children }) => {
 
       {/* Main Content Area (Rendered Children) */}
       <div className="flex flex-1 overflow-hidden relative p-2 sm:p-4 sm:pt-4 gap-4 z-10">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
       </div>
     </div>
   );
