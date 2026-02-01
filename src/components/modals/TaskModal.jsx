@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import PropTypes from "prop-types";
 import { Trash2, Save, RefreshCw, Layers } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import { useData } from "../../context/DataContext";
+import { useNotification } from "../../context/NotificationContext";
 import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
+import { sanitizeInput } from "../../utils/helpers";
+import { MAX_TASK_TITLE_LENGTH, MAX_TASK_DESCRIPTION_LENGTH } from "../../utils/constants";
 
 /**
  * TaskModal Component
@@ -18,8 +22,9 @@ import Button from "../ui/Button";
 const TaskModal = ({ requestDelete }) => {
   const { modals, closeModal, editingTask } = useUI();
   const { addEvent, updateEvent, deleteEvent, classColors } = useData();
+  const notify = useNotification();
 
-  const classes = Object.keys(classColors);
+  const classes = useMemo(() => Object.keys(classColors), [classColors]);
   const isOpen = modals.task;
 
   // --- Form State ---
@@ -89,9 +94,46 @@ const TaskModal = ({ requestDelete }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Prepare final payload
+    // Validate required fields
+    if (!formData.title?.trim()) {
+      notify.error("Task title is required");
+      return;
+    }
+    
+    // Validate title length
+    if (formData.title.length > MAX_TASK_TITLE_LENGTH) {
+      notify.error(`Title cannot exceed ${MAX_TASK_TITLE_LENGTH} characters (currently ${formData.title.length})`);
+      return;
+    }
+    
+    // Validate description length
+    if (formData.description && formData.description.length > MAX_TASK_DESCRIPTION_LENGTH) {
+      notify.error(`Description cannot exceed ${MAX_TASK_DESCRIPTION_LENGTH} characters (currently ${formData.description.length})`);
+      return;
+    }
+    
+    if (!formData.date) {
+      notify.error("Task date is required");
+      return;
+    }
+    
+    if (formData.recurrence !== "none") {
+      if (!formData.recurrenceEnd) {
+        notify.error("Recurrence end date is required for recurring events");
+        return;
+      }
+      // Validate that recurrence end is after start date
+      if (formData.recurrenceEnd <= formData.date) {
+        notify.error("Recurrence end date must be after start date");
+        return;
+      }
+    }
+    
+    // Prepare final payload with sanitized inputs
     const finalData = { 
         ...formData,
+        title: sanitizeInput(formData.title),
+        description: sanitizeInput(formData.description),
         time: isAllDay ? "" : formData.time 
     };
 
@@ -158,14 +200,31 @@ const TaskModal = ({ requestDelete }) => {
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Input
-          label="Task Title"
-          value={formData.title}
-          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-          placeholder="e.g. Calculus Chapter 4"
-          required
-          autoFocus
-        />
+        <div className="space-y-1.5">
+          <Input
+            label="Task Title"
+            value={formData.title}
+            onChange={(e) => {
+              if (e.target.value.length <= MAX_TASK_TITLE_LENGTH) {
+                setFormData({ ...formData, title: e.target.value });
+              }
+            }}
+            placeholder="e.g. Calculus Chapter 4"
+            required
+            autoFocus
+            aria-label="Task title"
+            aria-required="true"
+          />
+          <div className="flex justify-between items-center">
+            <span className={`text-xs ${
+              formData.title.length > MAX_TASK_TITLE_LENGTH * 0.9 
+                ? 'text-red-500 font-semibold' 
+                : 'text-slate-500'
+            }`}>
+              {formData.title.length}/{MAX_TASK_TITLE_LENGTH} characters
+            </span>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
@@ -174,6 +233,8 @@ const TaskModal = ({ requestDelete }) => {
               value={formData.class}
               onChange={(e) => setFormData({ ...formData, class: e.target.value })}
               className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+              aria-label="Select class"
+              aria-required="true"
             >
               {classes.length > 0 ? (
                 classes.map((c) => <option key={c} value={c}>{c}</option>)
@@ -189,6 +250,7 @@ const TaskModal = ({ requestDelete }) => {
               value={formData.type}
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
               className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+              aria-label="Select task type"
             >
               {["Homework", "Exam", "Project", "Quiz", "Lab", "Reading"].map(t => (
                  <option key={t} value={t}>{t}</option>
@@ -226,6 +288,7 @@ const TaskModal = ({ requestDelete }) => {
                     type="time"
                     value={formData.time}
                     disabled={isAllDay}
+                    pattern="[0-9]{2}:[0-9]{2}"
                     onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                     className={`
                         w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none 
@@ -256,10 +319,24 @@ const TaskModal = ({ requestDelete }) => {
           <textarea
             rows={3}
             value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onChange={(e) => {
+              if (e.target.value.length <= MAX_TASK_DESCRIPTION_LENGTH) {
+                setFormData({ ...formData, description: e.target.value });
+              }
+            }}
             className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none resize-none"
             placeholder="Add details, links, or notes..."
+            aria-label="Task description"
           />
+          <div className="flex justify-between items-center">
+            <span className={`text-xs ${
+              formData.description.length > MAX_TASK_DESCRIPTION_LENGTH * 0.9 
+                ? 'text-red-500 font-semibold' 
+                : 'text-slate-500'
+            }`}>
+              {formData.description.length}/{MAX_TASK_DESCRIPTION_LENGTH} characters
+            </span>
+          </div>
         </div>
 
         {/* Recurrence Settings (Create Mode) */}
@@ -326,6 +403,10 @@ const TaskModal = ({ requestDelete }) => {
       </form>
     </Modal>
   );
+};
+
+TaskModal.propTypes = {
+  requestDelete: PropTypes.func,
 };
 
 export default TaskModal;
