@@ -15,6 +15,15 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
       draggable={!task.completed}
       onDragStart={(e) => handleDragStart(e, task.id)}
       onClick={() => openEditTaskModal(task)}
+      role="button"
+      tabIndex={0}
+      aria-label={`${task.title}, ${task.class}, ${task.type}, ${task.completed ? 'completed' : 'incomplete'}${task.time ? `, due at ${task.time}` : ''}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openEditTaskModal(task);
+        }
+      }}
       className={`
         group relative flex items-start gap-3 p-3 rounded-2xl transition-all duration-300 cursor-pointer border
         ${task.completed 
@@ -30,6 +39,7 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
              e.stopPropagation();
              toggleTask(e, task.id);
         }}
+        aria-label={task.completed ? `Mark ${task.title} as incomplete` : `Mark ${task.title} as complete`}
         className={`
           mt-0.5 w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 shrink-0
           ${task.completed
@@ -74,7 +84,11 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
       </div>
       
       {!task.completed && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-300 cursor-grab active:cursor-grabbing md:block hidden p-2">
+        <div 
+          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-300 cursor-grab active:cursor-grabbing md:block hidden p-2"
+          aria-label="Drag to reschedule"
+          role="img"
+        >
           <GripVertical className="w-4 h-4" />
         </div>
       )}
@@ -94,6 +108,7 @@ const DropZone = ({
   openEditTaskModal,
   classColors
 }) => {
+  // Icon is used in JSX below
   const { draggedEventId, handleDragOver, handleSidebarDrop } = useDragDrop();
   const [isOpen, setIsOpen] = useState(true);
 
@@ -102,9 +117,13 @@ const DropZone = ({
       onDragOver={handleDragOver}
       onDrop={(e) => handleSidebarDrop(e, groupKey)}
       className="flex flex-col gap-2"
+      role="region"
+      aria-label={`${title} tasks section`}
     >
       <button 
         onClick={() => setIsOpen(!isOpen)}
+        aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${title} section with ${items ? items.length : 0} tasks`}
+        aria-expanded={isOpen}
         className={`
             flex items-center justify-between px-2 py-1.5 -mx-2 rounded-xl transition-colors group select-none
             hover:bg-white/40 dark:hover:bg-white/5 
@@ -305,14 +324,20 @@ const Sidebar = ({
           </div>
 
           {/* Class Filter Pills */}
-          <div className="pt-2 border-t border-black/5 dark:border-white/5">
-            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar">
+          <div className="pt-2 border-t border-black/5 dark:border-white/5 pointer-events-auto">
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar pointer-events-auto">
               <button
-                onClick={() => setHiddenClasses([])}
-                className={`text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setHiddenClasses([]);
+                }}
+                title="Show all classes"
+                className={`pointer-events-auto cursor-pointer text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all whitespace-nowrap ${
                   hiddenClasses.length === 0 
                     ? "bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-sm" 
-                    : "bg-white/50 dark:bg-white/5 text-secondary border border-black/5 dark:border-white/5 hover:bg-white dark:hover:bg-white/10"
+                    : "bg-white/50 dark:bg-white/5 text-secondary border border-black/5 dark:border-white/5 hover:bg-white hover:text-slate-900 dark:hover:bg-white/20 dark:hover:text-slate-900"
                 }`}
               >
                 All
@@ -320,23 +345,27 @@ const Sidebar = ({
               {classColors && Object.keys(classColors).map((cls) => (
                 <button
                   key={cls}
-                  onClick={() =>
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     setHiddenClasses((prev) =>
                       prev.includes(cls)
                         ? prev.filter((c) => c !== cls)
                         : [...prev, cls]
-                    )
-                  }
+                    );
+                  }}
+                  title={hiddenClasses.includes(cls) ? `Show ${cls}` : `Hide ${cls}`}
                   className={`
-                    text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1.5 transition-all
+                    pointer-events-auto text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer
                     ${hiddenClasses.includes(cls) 
-                        ? "opacity-50 grayscale bg-transparent border border-transparent text-secondary" 
-                        : "bg-white/50 dark:bg-white/5 border border-black/5 dark:border-white/5 shadow-sm hover:bg-white dark:hover:bg-white/10"
+                        ? "opacity-50 grayscale bg-transparent border border-transparent text-secondary hover:opacity-70" 
+                        : "bg-white/50 dark:bg-white/5 border border-black/5 dark:border-white/5 shadow-sm hover:bg-white hover:text-slate-900 dark:hover:bg-white/20 dark:hover:text-slate-900"
                     }
                   `}
                 >
                   <span
-                    className="w-1.5 h-1.5 rounded-full"
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                     style={{ backgroundColor: classColors[cls] }}
                   />
                   {cls}
