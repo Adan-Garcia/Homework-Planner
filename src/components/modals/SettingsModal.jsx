@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { BookOpen, Database, RefreshCw, ChevronRight, Wrench } from "lucide-react";
+import PropTypes from "prop-types";
+import { BookOpen, Database, RefreshCw, ChevronRight, Wrench, Server } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import Modal from "../ui/Modal";
 
@@ -7,11 +8,13 @@ import ClassManager from "../features/settings/ClassManager";
 import ImportContent from "../features/settings/ImportContent";
 import SyncRoomContent from "../features/settings/SyncRoomContent";
 import DateCleanerContent from "../features/settings/DateCleanerContent";
+import ApiConfigContent from "../features/settings/ApiConfigContent";
 
 const SettingsModal = ({ 
   classColors,
   setClassColors,
   deleteClass,
+  renameClass,
   mergeSource,
   setMergeSource,
   mergeTarget,
@@ -30,7 +33,7 @@ const SettingsModal = ({
     { id: "tools", label: "Tools", icon: Wrench },
     { id: "data", label: "Data", icon: Database },
     { id: "sync", label: "Sync", icon: RefreshCw },
-    
+    { id: "api", label: "API", icon: Server },
   ];
 
   const renderContent = () => {
@@ -40,6 +43,7 @@ const SettingsModal = ({
           classColors={classColors}
           setClassColors={setClassColors}
           onDeleteClass={deleteClass}
+          onRenameClass={renameClass}
           onRefreshColors={onRefreshColors}
           mergeSource={mergeSource}
           setMergeSource={setMergeSource}
@@ -57,7 +61,7 @@ const SettingsModal = ({
         />
       );
       case "sync": return <SyncRoomContent />;
-      
+      case "api": return <ApiConfigContent />;
       case "tools": return (
         <div className="space-y-6">
            <div className="bg-orange-50 dark:bg-orange-900/10 p-4 rounded-xl border border-orange-100 dark:border-orange-900/20">
@@ -117,6 +121,22 @@ const SettingsModal = ({
       </div>
     </Modal>
   );
+};
+
+SettingsModal.propTypes = {
+  classColors: PropTypes.object.isRequired,
+  setClassColors: PropTypes.func.isRequired,
+  deleteClass: PropTypes.func.isRequired,
+  renameClass: PropTypes.func.isRequired,
+  mergeSource: PropTypes.string,
+  setMergeSource: PropTypes.func.isRequired,
+  mergeTarget: PropTypes.string,
+  setMergeTarget: PropTypes.func.isRequired,
+  mergeClasses: PropTypes.func.isRequired,
+  resetAllData: PropTypes.func.isRequired,
+  handleICSExport: PropTypes.func.isRequired,
+  onOpenJsonEditor: PropTypes.func.isRequired,
+  onRefreshColors: PropTypes.func.isRequired,
 };
 
 export default SettingsModal;

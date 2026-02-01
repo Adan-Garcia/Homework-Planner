@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 import { AlertTriangle } from "lucide-react";
 
 const ConfirmationModal = ({
@@ -51,6 +52,17 @@ const ConfirmationModal = ({
       </div>
     </div>
   );
+};
+
+ConfirmationModal.propTypes = {
+  isOpen: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  onConfirm: PropTypes.func.isRequired,
+  title: PropTypes.string.isRequired,
+  message: PropTypes.string.isRequired,
+  confirmText: PropTypes.string,
+  cancelText: PropTypes.string,
+  isDanger: PropTypes.bool,
 };
 
 export default ConfirmationModal;

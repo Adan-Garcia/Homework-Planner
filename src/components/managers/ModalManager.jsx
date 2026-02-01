@@ -17,6 +17,7 @@ const ModalManager = () => {
     classColors,
     setClassColors,
     deleteClass,
+    renameClass,
     mergeClasses,
     resetAllData,
     exportICS,
@@ -103,6 +104,7 @@ const ModalManager = () => {
         classColors={classColors}
         setClassColors={setClassColors}
         deleteClass={deleteClass}
+        renameClass={renameClass}
         
         mergeSource={mergeSource}
         setMergeSource={setMergeSource}
