@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { format, subMonths } from "date-fns";
 import { useData } from "../context/DataContext";
 import { useUI } from "../context/PlannerContext";
 import { compareTasks } from "../utils/helpers";
+import { FILTER_HISTORY_MONTHS } from "../utils/constants";
 
 /**
  * Custom Hook: useFilteredEvents
@@ -11,7 +13,7 @@ import { compareTasks } from "../utils/helpers";
  * 1. Hidden Classes: Exclude tasks belonging to unchecked classes in the sidebar.
  * 2. Type Filter: Match specific task type (e.g., "Homework" or "Exam").
  * 3. Completion Status: Hide completed tasks if the toggle is off.
- * 4. Date Cutoff: Exclude events older than 1 month to keep performance high.
+ * 4. Date Cutoff: Exclude events older than FILTER_HISTORY_MONTHS to keep performance high.
  * 5. Search: Text search against Title and Class name.
  * 6. Sorting: Sort by Date -> Priority -> Time -> Title.
  */
@@ -23,14 +25,7 @@ export const useFilteredEvents = () => {
     
     // Performance optimization: 
     // Filter out very old events so we don't render history from years ago.
-    const d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    
-    // Create cutoff string YYYY-MM-DD
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const cutoffString = `${year}-${month}-${day}`;
+    const cutoffString = format(subMonths(new Date(), FILTER_HISTORY_MONTHS), 'yyyy-MM-dd');
 
     const filtered = events.filter((e) => {
       // 1. Class Visibility
