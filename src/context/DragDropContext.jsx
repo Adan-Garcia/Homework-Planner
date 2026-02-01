@@ -1,4 +1,5 @@
 import React, { createContext, useContext } from "react";
+import PropTypes from "prop-types";
 import { useTaskDragAndDrop } from "../hooks/useTaskDragAndDrop";
 
 const DragDropContext = createContext();
@@ -20,4 +21,8 @@ export const DragDropProvider = ({ children }) => {
       {children}
     </DragDropContext.Provider>
   );
+};
+
+DragDropProvider.propTypes = {
+  children: PropTypes.node.isRequired,
 };

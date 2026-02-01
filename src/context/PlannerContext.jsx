@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"; 
 import { STORAGE_KEYS } from "../utils/constants.js";
+import logger from "../utils/logger.js";
 
 const UIContext = createContext();
 
@@ -7,10 +8,12 @@ export const useUI = () => useContext(UIContext);
 
 // Helper to safely read JSON from localStorage
 const loadState = (key, fallback) => {
+  const item = localStorage.getItem(key);
+  if (!item) return fallback;
   try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : fallback;
+    return JSON.parse(item);
   } catch (e) {
+    logger.warn(`[UI] Failed to parse localStorage key "${key}":`, e);
     return fallback;
   }
 };
@@ -24,6 +27,12 @@ const loadState = (key, fallback) => {
  * 3. Modals: Open/Close state for settings, task editors, etc.
  * 4. Navigation: Current selected date.
  * 5. Filters: Search queries and filter toggles.
+ */
+/**
+ * UIProvider Component
+ * * Manages all presentational state including theme, view modes, modals, and filters.
+ * * State is automatically persisted to localStorage where appropriate.
+ * * Note: Uses memoization to prevent unnecessary re-renders of consuming components.
  */
 export const UIProvider = ({ children }) => {
   // --- Persistent UI State ---

@@ -7,6 +7,7 @@ import React, {
   useCallback,
 } from "react";
 import { useRoomAuth } from "../hooks/useRoomAuth";
+import logger from "../utils/logger";
 
 const AuthContext = createContext();
 
@@ -24,9 +25,12 @@ export const AuthProvider = ({ children }) => {
   
   // Initialize Room ID from LocalStorage if available
   const [roomId, setRoomId] = useState(() => {
+    const stored = localStorage.getItem("planner_curr_room_id");
+    if (!stored) return null;
     try {
-      return JSON.parse(localStorage.getItem("planner_curr_room_id"));
-    } catch {
+      return JSON.parse(stored);
+    } catch (e) {
+      logger.warn("[Auth] Failed to parse stored room ID:", e);
       return null;
     }
   });
@@ -42,7 +46,7 @@ export const AuthProvider = ({ children }) => {
   }, [roomId]);
 
   // Execute the authentication handshake hook
-  const { isAuthorized, authToken, cryptoKey, authError, isNewRoom } =
+  const { isAuthorizing, isAuthorized, authToken, cryptoKey, authError, isNewRoom } =
     useRoomAuth(roomId, roomPassword);
 
   // Logout / Switch Room handler
@@ -58,6 +62,7 @@ export const AuthProvider = ({ children }) => {
       setRoomId,
       roomPassword,
       setRoomPassword,
+      isAuthorizing, // True during PBKDF2 key derivation
       isAuthorized, // True if we have valid tokens + keys
       authToken,    // JWT for API requests
       cryptoKey,    // AES-GCM key for decryption
@@ -68,6 +73,7 @@ export const AuthProvider = ({ children }) => {
     [
       roomId,
       roomPassword,
+      isAuthorizing,
       isAuthorized,
       authToken,
       cryptoKey,

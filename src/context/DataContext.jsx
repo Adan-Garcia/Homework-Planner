@@ -10,9 +10,11 @@ import React, {
 import { addDays, format, parseISO, isAfter } from "date-fns";
 import { useAuth } from "./AuthContext.jsx";
 import { useSocketSync } from "../hooks/useSocketSync.js";
-import { STORAGE_KEYS, PALETTE } from "../utils/constants.js";
-import { generateICS } from "../utils/helpers.js";
+import { useNotification } from "./NotificationContext.jsx";
+import { STORAGE_KEYS, PALETTE, RECURRENCE_INTERVAL_WEEKLY, RECURRENCE_INTERVAL_BIWEEKLY } from "../utils/constants.js";
+import { generateICS, normalizeEvent, validateEvent } from "../utils/helpers.js";
 import { processICSContent, fetchRemoteICS } from "../utils/icsHelpers.js";
+import logger from "../utils/logger.js";
 
 const DataContext = createContext();
 
@@ -20,24 +22,44 @@ export const useData = () => useContext(DataContext);
 
 // Helper to safely load JSON from localStorage
 const loadState = (key, fallback) => {
+  const item = localStorage.getItem(key);
+  if (!item) return fallback;
   try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : fallback;
-  } catch {
+    return JSON.parse(item);
+  } catch (e) {
+    logger.warn(`[Data] Failed to parse localStorage key "${key}":`, e);
     return fallback;
   }
 };
 
 /**
  * DataContext Provider
- * * Acts as the "Brain" of the application. It manages:
- * 1. Local State (events, colors, settings)
- * 2. Persistence (localStorage)
- * 3. Synchronization (via useSocketSync)
- * 4. Business Logic (recurrence, merging classes, imports)
+ * 
+ * Central state management for all application data including events, classes, and settings.
+ * 
+ * **Responsibilities:**
+ * 1. Local State Management: Maintains events, class colors, and hidden classes
+ * 2. Persistence: Automatically syncs to localStorage with quota management
+ * 3. Real-time Sync: Coordinates with useSocketSync for multi-device synchronization
+ * 4. Business Logic: Handles recurrence expansion, class merging, imports/exports
+ * 
+ * **Synchronization Strategy:**
+ * - When authorized: All mutations go through encrypted socket sync
+ * - When offline: Changes stored locally and re-synced on reconnection
+ * - Optimistic updates: UI updates immediately, then syncs to server
+ * 
+ * **Security:**
+ * - All data encrypted before transmission (see crypto.js)
+ * - Server never sees plaintext event data
+ * - Keys derived locally from user password
+ * 
+ * @example
+ * const { events, addEvent, classColors } = useData();
+ * addEvent({ title: "Homework", date: "2026-02-15", class: "Math" });
  */
 export const DataProvider = ({ children }) => {
   const { roomId, authToken, cryptoKey, isAuthorized } = useAuth();
+  const notify = useNotification();
 
   // --- Local State Initialization ---
   const [events, setEvents] = useState(() =>
@@ -58,19 +80,74 @@ export const DataProvider = ({ children }) => {
 
   // --- Persistence Effects ---
   // Automatically save to localStorage whenever state changes
+  /**
+   * Safely writes to localStorage with quota exceeded recovery.
+   * * Attempts automatic cleanup if storage is full.
+   * * Falls back to memory-only mode if recovery fails.
+   * * @param {string} key - The localStorage key
+   * * @param {string} value - The value to store
+   */
+  const safeSetItem = useCallback((key, value) => {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      logger.error(`[Data] Failed to write localStorage key "${key}":`, e);
+      
+      // Attempt recovery strategies
+      if (e.name === 'QuotaExceededError') {
+        // Storage quota exceeded - try to clear old/temporary data
+        try {
+          // Find and remove any keys that look temporary or outdated
+          const keysToClean = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const storageKey = localStorage.key(i);
+            // Clean up old versions, temporary data, and orphaned keys
+            if (storageKey && (
+              storageKey.includes('_old_') ||
+              storageKey.includes('_backup_') ||
+              storageKey.includes('_temp') ||
+              storageKey.startsWith('temp_') ||
+              storageKey.startsWith('cache_')
+            )) {
+              keysToClean.push(storageKey);
+            }
+          }
+          
+          if (keysToClean.length > 0) {
+            logger.log(`[Data] Cleaning up ${keysToClean.length} old storage keys`);
+            keysToClean.forEach(k => localStorage.removeItem(k));
+            
+            // Retry after cleanup
+            localStorage.setItem(key, value);
+            logger.log('[Data] localStorage quota recovered after cleanup');
+            notify.warning('Storage space was low. Old data was cleaned up.', 5000);
+          } else {
+            // No temp data to clean - storage genuinely full
+            throw new Error('No temporary data available to clean');
+          }
+        } catch (retryError) {
+          logger.error('[Data] Failed to recover localStorage quota:', retryError);
+          // Fall back to in-memory only mode
+          logger.warn('[Data] App running in memory-only mode. Data will not persist.');
+          notify.error('Storage quota exceeded. Your data will only be saved while this tab is open. Please export your data or clear browser storage.', 10000);
+        }
+      } else {
+        notify.error('Failed to save data to local storage. Changes may not persist.', 5000);
+      }
+    }
+  }, [notify]);
+
   useEffect(
-    () => localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events)),
-    [events],
+    () => safeSetItem(STORAGE_KEYS.EVENTS, JSON.stringify(events)),
+    [events, safeSetItem],
   );
   useEffect(
-    () =>
-      localStorage.setItem(STORAGE_KEYS.COLORS, JSON.stringify(classColors)),
-    [classColors],
+    () => safeSetItem(STORAGE_KEYS.COLORS, JSON.stringify(classColors)),
+    [classColors, safeSetItem],
   );
   useEffect(
-    () =>
-      localStorage.setItem(STORAGE_KEYS.HIDDEN, JSON.stringify(hiddenClasses)),
-    [hiddenClasses],
+    () => safeSetItem(STORAGE_KEYS.HIDDEN, JSON.stringify(hiddenClasses)),
+    [hiddenClasses, safeSetItem],
   );
 
   // --- Synchronization Hook ---
@@ -123,26 +200,60 @@ export const DataProvider = ({ children }) => {
         event.recurrence !== "none" &&
         event.recurrenceEnd
       ) {
-        // --- Recurrence Expansion Logic ---
-        const eventsToCreate = [];
-        const groupId = crypto.randomUUID(); // Link all instances together
-        const startDate = parseISO(event.date);
-        const endDate = parseISO(event.recurrenceEnd);
-        let current = startDate;
+        // --- Recurrence Expansion Logic with Validation ---
+        try {
+          const startDate = parseISO(event.date);
+          const endDate = parseISO(event.recurrenceEnd);
+          
+          // Validate dates are valid
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            logger.error("[Data] Invalid date format for recurrence");
+            return;
+          }
+          
+          // Validate that recurrence end is after start date
+          if (isAfter(startDate, endDate)) {
+            logger.error(
+              "[Data] Recurrence end date must be after start date",
+              { start: event.date, end: event.recurrenceEnd }
+            );
+            notify.error("Recurrence end date must be after start date");
+            return;
+          }
+          
+          // Validate recurrence span (max 12 months to prevent performance issues)
+          const MAX_RECURRENCE_MONTHS = 12;
+          const daysDiff = (endDate - startDate) / (1000 * 60 * 60 * 24);
+          const monthsDiff = daysDiff / 30;
+          if (monthsDiff > MAX_RECURRENCE_MONTHS) {
+            logger.error(
+              "[Data] Recurrence span too long",
+              { months: monthsDiff.toFixed(1), max: MAX_RECURRENCE_MONTHS }
+            );
+            notify.error(`Recurrence cannot exceed ${MAX_RECURRENCE_MONTHS} months (currently ${monthsDiff.toFixed(1)} months)`);
+            return;
+          }
+          
+          const eventsToCreate = [];
+          const groupId = crypto.randomUUID(); // Link all instances together
+          let current = startDate;
 
-        const interval = event.recurrence === "weekly" ? 7 : 14;
+          const interval = event.recurrence === "weekly" ? RECURRENCE_INTERVAL_WEEKLY : RECURRENCE_INTERVAL_BIWEEKLY;
 
-        while (!isAfter(current, endDate)) {
-          eventsToCreate.push({
-            ...event,
-            id: crypto.randomUUID(), // Unique ID per instance
-            groupId, // Shared ID for the series
-            date: format(current, "yyyy-MM-dd"),
-          });
-          current = addDays(current, interval);
+          while (!isAfter(current, endDate)) {
+            eventsToCreate.push({
+              ...event,
+              id: crypto.randomUUID(), // Unique ID per instance
+              groupId, // Shared ID for the series
+              date: format(current, "yyyy-MM-dd"),
+            });
+            current = addDays(current, interval);
+          }
+
+          bulkAddEvents(eventsToCreate);
+        } catch (error) {
+          logger.error("[Data] Error creating recurring events:", error);
         }
-
-        bulkAddEvents(eventsToCreate);
       } else {
         // --- Single Event Logic ---
         const eventWithId = { ...event, id: event.id || crypto.randomUUID() };
@@ -150,7 +261,7 @@ export const DataProvider = ({ children }) => {
         else setEvents((prev) => [...prev, eventWithId]);
       }
     },
-    [isAuthorized, serverAdd, bulkAddEvents],
+    [isAuthorized, serverAdd, bulkAddEvents, setEvents],
   );
 
   /**
@@ -351,17 +462,44 @@ export const DataProvider = ({ children }) => {
     (jsonString, append = false) => {
       try {
         const data = JSON.parse(jsonString);
-        if (Array.isArray(data)) {
-          if (!append) {
-            if (isAuthorized) serverClear();
-            else setEvents([]);
-          }
-          bulkAddEvents(data);
-          return { success: true };
+        if (!Array.isArray(data)) {
+          return { success: false, error: "Invalid JSON format" };
         }
-        return { success: false, error: "Invalid JSON format" };
+
+        const normalized = data
+          .map((raw) => normalizeEvent(raw))
+          .filter(Boolean);
+
+        const validEvents = [];
+        const invalidEvents = [];
+
+        normalized.forEach((event) => {
+          const validation = validateEvent(event);
+          if (validation.isValid) validEvents.push(event);
+          else invalidEvents.push({ event, errors: validation.errors });
+        });
+
+        if (validEvents.length === 0) {
+          return {
+            success: false,
+            error: "No valid events found in JSON import",
+            invalidCount: invalidEvents.length,
+          };
+        }
+
+        if (!append) {
+          if (isAuthorized) serverClear();
+          else setEvents([]);
+        }
+
+        bulkAddEvents(validEvents);
+        return {
+          success: true,
+          count: validEvents.length,
+          invalidCount: invalidEvents.length,
+        };
       } catch (e) {
-        console.error("JSON Import failed", e);
+        logger.error("JSON Import failed", e);
         return { success: false, error: e.message };
       }
     },
