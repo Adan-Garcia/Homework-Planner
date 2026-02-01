@@ -1,6 +1,8 @@
 import React, { useRef, useState } from "react";
+import PropTypes from "prop-types";
 import { Upload, FileJson, FileCode, Download, Trash2, AlertTriangle, Link as LinkIcon, Loader2 } from "lucide-react";
 import { useData } from "../../../context/DataContext";
+import logger from "../../../utils/logger";
 
 const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) => {
   const { processICSContent, importJsonData, importICSFromUrl } = useData();
@@ -23,7 +25,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
         alert(result.error || `Failed to parse ${fileType} file.`);
       }
     } catch (err) {
-      console.error(err);
+      logger.error("[ImportContent] File import error:", err);
       alert("Failed to read file.");
     }
     e.target.value = "";
@@ -41,7 +43,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
         } else {
             alert(result.error || "Failed to import from URL");
         }
-    } catch(e) {
+    } catch(_e) {
         alert("An error occurred during import.");
     } finally {
         setIsLoading(false);
@@ -144,3 +146,10 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
 };
 
 export default ImportContent;
+
+ImportContent.propTypes = {
+  onOpenJsonEditor: PropTypes.func.isRequired,
+  onCloseModal: PropTypes.func.isRequired,
+  resetData: PropTypes.func.isRequired,
+  onExport: PropTypes.func.isRequired,
+};
