@@ -280,6 +280,20 @@ export const useSocketSync = (
     newSocket.on(SOCKET_EVENTS.DISCONNECT, () => {
       setPeerCount(0);
     });
+    
+    // Track connection readiness for initial data fetch
+    const connectionReady = new Promise((resolve) => {
+      if (newSocket.connected) {
+        resolve();
+      } else {
+        const onConnect = () => {
+          newSocket.off(SOCKET_EVENTS.CONNECT, onConnect);
+          resolve();
+        };
+        newSocket.on(SOCKET_EVENTS.CONNECT, onConnect);
+      }
+    });
+    
     // Connect now that listeners are ready
     newSocket.connect();
     setSocket(newSocket);
@@ -289,6 +303,9 @@ export const useSocketSync = (
     const abortController = new AbortController();
     const fetchInitialData = async () => {
       try {
+        // Wait for socket connection before attempting any emits
+        await connectionReady;
+        
         logger.log(`[Sync] Fetching events for room: ${roomId}`);
         const res = await fetch(`${getApiBaseUrl()}/api/rooms/${roomId}/events`, {
           headers: { Authorization: `Bearer ${authToken}` },
