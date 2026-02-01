@@ -64,7 +64,7 @@
     @apply bg-white dark:bg-[#636366] text-black dark:text-white shadow-sm font-semibold;
   }
   .segmented-item-inactive {
-    @apply text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10;
+    @apply text-slate-500 dark:text-slate-400 hover:text-slate-950 dark:hover:text-slate-900 hover:bg-slate-200/70 dark:hover:bg-white/20;
   }
 
   
@@ -102,15 +102,15 @@
   }
   
   .btn-secondary {
-    @apply bg-white/50 dark:bg-white/10 text-slate-900 dark:text-white border border-black/5 dark:border-purple-500/30 hover:bg-white dark:hover:bg-white/20 backdrop-blur-md;
+    @apply bg-white/50 dark:bg-white/10 text-slate-900 dark:text-white border border-black/5 dark:border-purple-500/30 hover:bg-white hover:text-black dark:hover:bg-white/20 dark:hover:text-slate-900 backdrop-blur-md;
   }
   
   .btn-ghost {
-    @apply text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10;
+    @apply text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-slate-900 hover:bg-slate-200/70 dark:hover:bg-white/20;
   }
   
   .btn-danger-soft {
-    @apply bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20;
+    @apply bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 hover:text-red-700 dark:hover:text-red-300;
   }
 
   
