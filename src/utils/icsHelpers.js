@@ -1,5 +1,6 @@
-import { determineClass, determineType } from "./helpers";
-import { API_BASE_URL } from "./constants";
+import { determineClass, determineType, normalizeEvent, validateEvent } from "./helpers";
+import { getApiBaseUrl, PALETTE } from "./constants";
+import logger from "./logger";
 
 /**
  * Fetch Remote ICS
@@ -8,7 +9,7 @@ import { API_BASE_URL } from "./constants";
  */
 export const fetchRemoteICS = async (url) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/proxy/ical?url=${encodeURIComponent(url)}`);
+    const response = await fetch(`${getApiBaseUrl()}/api/proxy/ical?url=${encodeURIComponent(url)}`);
     
     if (!response.ok) {
       // Try to parse error from backend
@@ -22,7 +23,7 @@ export const fetchRemoteICS = async (url) => {
 
     return await response.text();
   } catch (error) {
-    console.error("ICS Fetch Error:", error);
+    logger.error("[ICS] Fetch Error:", error);
     throw error; 
   }
 };
@@ -66,10 +67,7 @@ export const processICSContent = (
 
       // Assign colors to any newly found classes
       let finalColors = { ...currentClassColors };
-      const defaultPalette = [
-        "#3b82f6", "#10b981", "#f59e0b", "#ef4444", 
-        "#8b5cf6", "#ec4899", "#6366f1", "#14b8a6",
-      ];
+      const defaultPalette = PALETTE;
       let colorIndex = Object.keys(finalColors).length;
 
       classes.forEach((cls) => {
@@ -81,19 +79,27 @@ export const processICSContent = (
 
       handleSetClassColors(finalColors);
 
+      const normalized = events
+        .map((raw) => normalizeEvent(raw))
+        .filter(Boolean);
+
+      const validEvents = normalized.filter(
+        (event) => validateEvent(event).isValid,
+      );
+
       // Add the parsed events to the application state
       if (isAuthorized) {
-        bulkAddEvents(events);
+        bulkAddEvents(validEvents);
       } else {
-        setEvents((prev) => [...prev, ...events]);
+        setEvents((prev) => [...prev, ...validEvents]);
       }
 
       worker.terminate();
-      resolve({ success: true, count: events.length });
+      resolve({ success: true, count: validEvents.length });
     };
 
     worker.onerror = (err) => {
-      console.error("Worker Error", err);
+      logger.error("[ICS] Worker Error", err);
       worker.terminate();
       resolve({ success: false, error: "Worker failed to process file." });
     };
