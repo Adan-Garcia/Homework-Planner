@@ -17,6 +17,7 @@ import {
 import { useUI } from "../../../context/PlannerContext";
 import { useData } from "../../../context/DataContext";
 import { useAuth } from "../../../context/AuthContext";
+import logger from "../../../utils/logger";
 
 /**
  * SetupScreen Component
@@ -29,7 +30,7 @@ import { useAuth } from "../../../context/AuthContext";
  */
 const SetupScreen = () => {
   const { processICSContent, setEvents } = useData();
-  const { setRoomId, setRoomPassword, authError } = useAuth();
+  const { setRoomId, setRoomPassword, authError, isAuthorizing } = useAuth();
   const { darkMode, setDarkMode, setView, openModal } = useUI();
 
   const [urlInput, setUrlInput] = useState("");
@@ -51,7 +52,7 @@ const SetupScreen = () => {
       const result = await processICSContent(text); 
       if (result.success) setView("planner");
       else setError(result.error);
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to read file.");
     }
   };
@@ -75,7 +76,7 @@ const SetupScreen = () => {
         const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("Primary proxy refused");
         text = await response.text();
-      } catch (err) {
+      } catch (_err) {
         // Fallback Proxy
         const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("All proxies failed");
@@ -92,7 +93,7 @@ const SetupScreen = () => {
       else setError(result.error);
 
     } catch (err) {
-      console.error(err);
+      logger.error("[SetupScreen] URL import error:", err);
       setError("Unable to access this calendar. Try downloading the .ics file manually.");
     } finally {
       setIsLoading(false);
@@ -109,6 +110,10 @@ const SetupScreen = () => {
       setError("Room Code and Password are required.");
       return;
     }
+    if (passwordInput.length < 12) {
+      setError("Password must be at least 12 characters for secure encryption.");
+      return;
+    }
     setRoomPassword(passwordInput);
     setRoomId(roomInput.toUpperCase());
     setView("planner");
@@ -122,8 +127,8 @@ const SetupScreen = () => {
     e.preventDefault();
     
     // Enforce password strength for security (it generates the encryption keys)
-    if (!passwordInput || passwordInput.length < 10) {
-      setError("Password must be at least 10 characters long.");
+    if (!passwordInput || passwordInput.length < 12) {
+      setError("Password must be at least 12 characters long for secure encryption.");
       return;
     }
 
@@ -218,16 +223,32 @@ const SetupScreen = () => {
                   <button
                     type="submit"
                     onClick={handleConnect}
-                    className="bg-[#007AFF] text-white py-3 rounded-xl text-sm font-bold hover:bg-[#0062CC] shadow-lg shadow-blue-500/30 transition-all active:scale-95"
+                    disabled={isAuthorizing}
+                    className="bg-[#007AFF] text-white py-3 rounded-xl text-sm font-bold hover:bg-[#0062CC] shadow-lg shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    Connect
+                    {isAuthorizing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Connecting...
+                      </>
+                    ) : (
+                      'Connect'
+                    )}
                   </button>
                   <button
                     type="submit"
                     onClick={handleCreateNew}
-                    className="bg-black/5 dark:bg-white/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-black/10 dark:hover:bg-white/20 transition-all active:scale-95"
+                    disabled={isAuthorizing}
+                    className="bg-black/5 dark:bg-white/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-black/10 dark:hover:bg-white/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    New Room
+                    {isAuthorizing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'New Room'
+                    )}
                   </button>
                 </div>
               </form>
