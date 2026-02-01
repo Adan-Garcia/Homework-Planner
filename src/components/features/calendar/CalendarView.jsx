@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import PropTypes from "prop-types";
 import {
   format,
   addMonths,
@@ -23,6 +24,107 @@ import Button from "../../../components/ui/Button";
 import { useDragDrop } from "../../../context/DragDropContext";
 
 /**
+ * CalendarTaskCard Component
+ * * Displays a single task in the calendar with completion toggle
+ * * Supports compact and expanded modes
+ * * Includes drag-and-drop functionality for rescheduling
+ */
+const CalendarTaskCard = ({ task, isCompact = false, classColors, onEventClick, toggleTask, draggedEventId, handleDragStart }) => (
+  <div
+    draggable={!task.completed}
+    onDragStart={(e) => handleDragStart(e, task.id)}
+    onClick={(e) => {
+      e.stopPropagation();
+      onEventClick(task);
+    }}
+    role="button"
+    tabIndex={0}
+    aria-label={`${task.title}, ${task.class}, ${task.completed ? 'completed' : 'incomplete'}, ${task.priority} priority${task.time ? `, scheduled for ${task.time}` : ''}`}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onEventClick(task);
+      }
+    }}
+    className={`
+      cursor-pointer overflow-hidden transition-all duration-300 group relative backdrop-blur-sm
+      ${isCompact ? "px-2 py-1 mb-1 rounded-lg text-[10px] border-l-2" : "p-3 mb-2 rounded-2xl border border-white/50 dark:border-white/5 shadow-sm"}
+      ${task.completed ? "opacity-40 grayscale bg-black/5 dark:bg-white/5" : "bg-white/80 dark:bg-white/10 hover:bg-white hover:shadow-lg hover:-translate-y-0.5 hover:scale-[1.02] dark:hover:bg-white/20"}
+      ${draggedEventId === task.id ? "opacity-30" : ""}
+    `}
+    style={{ 
+      borderLeftColor: isCompact ? classColors[task.class] : undefined,
+      backgroundColor: isCompact ? `${classColors[task.class]}25` : undefined 
+    }}
+  >
+      
+      {!isCompact && (
+          <div className="absolute left-1 top-3 bottom-3 w-1 rounded-full" style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }} />
+      )}
+      
+    <div className={`flex items-center gap-2 justify-between ${!isCompact ? "pl-3" : ""}`}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleTask?.(e, task.id);
+          }}
+          aria-label={task.completed ? `Mark ${task.title} as incomplete` : `Mark ${task.title} as complete`}
+          className={`
+            w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 shrink-0
+            ${task.completed
+                ? "bg-[#34C759] border-[#34C759] text-white scale-100"
+                : "border-slate-300 dark:border-slate-500 hover:border-[#34C759] text-transparent scale-95 hover:scale-100"
+            }
+          `}
+        >
+          <Check className="w-3 h-3 stroke-[4]" />
+        </button>
+        <span className={`font-semibold truncate ${isCompact ? "text-slate-800 dark:text-slate-100" : "text-sm text-primary"} ${task.completed ? "line-through text-secondary" : ""}`}>
+          {task.title}
+        </span>
+      </div>
+      {task.priority === "High" && !task.completed && (
+        <Flag className="w-3 h-3 text-red-500 fill-red-500 shrink-0" />
+      )}
+    </div>
+    
+    {!isCompact && (
+      <div className="flex justify-between items-center mt-2 pl-3">
+        <div className="flex gap-2">
+           <span className="text-[10px] font-bold text-secondary uppercase tracking-wide opacity-80">{task.class}</span>
+        </div>
+        {task.time && (
+          <div className="text-[10px] text-secondary font-medium flex items-center gap-1 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
+            <Clock className="w-3 h-3" /> {task.time}
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+);
+
+// PropTypes for CalendarTaskCard
+CalendarTaskCard.propTypes = {
+  task: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    title: PropTypes.string.isRequired,
+    class: PropTypes.string.isRequired,
+    type: PropTypes.string,
+    priority: PropTypes.string,
+    completed: PropTypes.bool,
+    time: PropTypes.string,
+    date: PropTypes.string.isRequired,
+  }).isRequired,
+  isCompact: PropTypes.bool,
+  classColors: PropTypes.object.isRequired,
+  onEventClick: PropTypes.func.isRequired,
+  toggleTask: PropTypes.func,
+  draggedEventId: PropTypes.string,
+  handleDragStart: PropTypes.func.isRequired,
+};
+
+/**
  * CalendarView Component
  * * Renders the main calendar grid/list based on the selected view mode.
  * * Supports: Month, Week, Day, and Agenda views.
@@ -34,6 +136,7 @@ const CalendarView = ({
   classColors,
   onEventClick,
   onDateClick,
+  toggleTask,
 }) => {
   const { draggedEventId, handleDragStart, handleDragOver, handleDrop } = useDragDrop();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -93,59 +196,8 @@ const CalendarView = ({
     return map;
   }, [filteredEvents]);
 
-  const CalendarTaskCard = ({ task, isCompact = false }) => (
-    <div
-      draggable={!task.completed}
-      onDragStart={(e) => handleDragStart(e, task.id)}
-      onClick={(e) => {
-        e.stopPropagation();
-        onEventClick(task);
-      }}
-      className={`
-        cursor-pointer overflow-hidden transition-all duration-300 group relative backdrop-blur-sm
-        ${isCompact ? "px-2 py-1 mb-1 rounded-lg text-[10px] border-l-2" : "p-3 mb-2 rounded-2xl border border-white/50 dark:border-white/5 shadow-sm"}
-        ${task.completed ? "opacity-40 grayscale bg-black/5 dark:bg-white/5" : "bg-white/80 dark:bg-white/10 hover:bg-white hover:shadow-lg hover:-translate-y-0.5 hover:scale-[1.02]"}
-        ${draggedEventId === task.id ? "opacity-30" : ""}
-      `}
-      style={{ 
-        borderLeftColor: isCompact ? classColors[task.class] : undefined,
-        backgroundColor: isCompact ? `${classColors[task.class]}25` : undefined 
-      }}
-    >
-        
-        {!isCompact && (
-            <div className="absolute left-1 top-3 bottom-3 w-1 rounded-full" style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }} />
-        )}
-        
-      <div className={`flex items-center gap-2 justify-between ${!isCompact ? "pl-3" : ""}`}>
-        <div className="flex items-center gap-1.5 min-w-0">
-          {task.completed && <Check className="w-3 h-3 text-green-600 shrink-0" />}
-          <span className={`font-semibold truncate ${isCompact ? "text-slate-800 dark:text-slate-100" : "text-sm text-primary"} ${task.completed ? "line-through text-secondary" : ""}`}>
-            {task.title}
-          </span>
-        </div>
-        {task.priority === "High" && !task.completed && (
-          <Flag className="w-3 h-3 text-red-500 fill-red-500 shrink-0" />
-        )}
-      </div>
-      
-      {!isCompact && (
-        <div className="flex justify-between items-center mt-2 pl-3">
-          <div className="flex gap-2">
-             <span className="text-[10px] font-bold text-secondary uppercase tracking-wide opacity-80">{task.class}</span>
-          </div>
-          {task.time && (
-            <div className="text-[10px] text-secondary font-medium flex items-center gap-1 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
-              <Clock className="w-3 h-3" /> {task.time}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
-  
-  const MobileView = () => {
+  // Mobile View Component - extracted to avoid defining during render
+  const renderMobileView = () => {
     const isMonthView = calendarView === 'month';
     // On mobile, month view shows a week strip that can expand, or we simplify for now
     const activeDays = isMonthView 
@@ -163,9 +215,9 @@ const CalendarView = ({
             <div className="flex justify-between items-center mb-4">
                <span className="font-bold text-xl tracking-tight text-primary">{format(currentDate, "MMMM yyyy")}</span>
                <div className="flex gap-1">
-                   <Button variant="ghost" size="sm" onClick={() => navigate('prev')} className="!p-1.5 rounded-full"><ChevronLeft className="w-5 h-5"/></Button>
-                   <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date())} className="text-xs font-bold rounded-full">Today</Button>
-                   <Button variant="ghost" size="sm" onClick={() => navigate('next')} className="!p-1.5 rounded-full"><ChevronRight className="w-5 h-5"/></Button>
+                   <Button variant="ghost" size="sm" onClick={() => navigate('prev')} aria-label="Previous month" className="!p-1.5 rounded-full"><ChevronLeft className="w-5 h-5"/></Button>
+                   <Button variant="ghost" size="sm" onClick={() => setCurrentDate(new Date())} aria-label="Go to today" className="text-xs font-bold rounded-full">Today</Button>
+                   <Button variant="ghost" size="sm" onClick={() => navigate('next')} aria-label="Next month" className="!p-1.5 rounded-full"><ChevronRight className="w-5 h-5"/></Button>
                </div>
             </div>
             
@@ -185,7 +237,9 @@ const CalendarView = ({
                        return (
                            <button 
                                 key={day.toString()} 
-                                onClick={() => setCurrentDate(day)} 
+                                onClick={() => setCurrentDate(day)}
+                                aria-label={`Select ${format(day, 'MMMM d, yyyy')}${hasEvent ? ', has events' : ''}${isTodayDay ? ', today' : ''}`}
+                                aria-current={isSel ? 'date' : undefined}
                                 className={`
                                     h-8 w-8 mx-auto rounded-full flex flex-col items-center justify-center text-sm relative transition-all duration-300
                                     ${isSel ? "bg-[#007AFF] text-white shadow-lg shadow-blue-500/30 font-bold scale-110" : isTodayDay ? "text-[#007AFF] font-bold bg-blue-50 dark:bg-blue-900/20" : "text-primary hover:bg-black/5 dark:hover:bg-white/10"}
@@ -211,7 +265,17 @@ const CalendarView = ({
          <div className="flex-1 overflow-y-auto p-4 space-y-3">
              <h3 className="text-xs font-bold uppercase text-secondary tracking-wider mb-3 pl-1">{format(currentDate, "EEEE, MMMM do")}</h3>
              {selectedEvents.length > 0 ? (
-                 selectedEvents.map(t => <CalendarTaskCard key={t.id} task={t} />)
+                 selectedEvents.map(t => (
+                   <CalendarTaskCard 
+                     key={t.id} 
+                     task={t}
+                     classColors={classColors}
+                     onEventClick={onEventClick}
+                     toggleTask={toggleTask}
+                     draggedEventId={draggedEventId}
+                     handleDragStart={handleDragStart}
+                   />
+                 ))
              ) : (
                  <div className="flex flex-col items-center justify-center py-12 text-secondary opacity-50">
                     <Clock className="w-12 h-12 mb-3 opacity-50" />
@@ -228,7 +292,7 @@ const CalendarView = ({
       
       
       <div className="md:hidden h-full">
-         <MobileView />
+         {renderMobileView()}
       </div>
 
       
@@ -240,9 +304,9 @@ const CalendarView = ({
             </h2>
             {calendarView !== "agenda" && (
             <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 rounded-full p-1 border border-black/5 dark:border-white/5 shadow-inner">
-               <Button variant="ghost" onClick={() => navigate("prev")} className="!rounded-full w-8 h-8 !p-0"><ChevronLeft className="w-5 h-5" /></Button>
-               <Button variant="ghost" onClick={() => setCurrentDate(new Date())} className="px-4 font-semibold text-xs rounded-full">Today</Button>
-               <Button variant="ghost" onClick={() => navigate("next")} className="!rounded-full w-8 h-8 !p-0"><ChevronRight className="w-5 h-5" /></Button>
+               <Button variant="ghost" onClick={() => navigate("prev")} aria-label="Previous period" className="!rounded-full w-8 h-8 !p-0"><ChevronLeft className="w-5 h-5" /></Button>
+               <Button variant="ghost" onClick={() => setCurrentDate(new Date())} aria-label="Go to today" className="px-4 font-semibold text-xs rounded-full">Today</Button>
+               <Button variant="ghost" onClick={() => navigate("next")} aria-label="Next period" className="!rounded-full w-8 h-8 !p-0"><ChevronRight className="w-5 h-5" /></Button>
             </div>
             )}
          </header>
@@ -306,7 +370,16 @@ const CalendarView = ({
                                     
                                     <div className="flex-1 overflow-y-auto px-1.5 pb-1 space-y-1 custom-scrollbar">
                                         {dayEvents.map((task) => (
-                                        <CalendarTaskCard key={task.id} task={task} isCompact />
+                                        <CalendarTaskCard 
+                                          key={task.id} 
+                                          task={task} 
+                                          isCompact 
+                                          classColors={classColors}
+                                          onEventClick={onEventClick}
+                                          toggleTask={toggleTask}
+                                          draggedEventId={draggedEventId}
+                                          handleDragStart={handleDragStart}
+                                        />
                                         ))}
                                     </div>
                                 </div>
@@ -332,7 +405,15 @@ const CalendarView = ({
                             </div>
                             <div className={`flex-1 p-2 space-y-2 overflow-y-auto custom-scrollbar ${isToday(day) ? "bg-blue-50/20" : ""}`}>
                                 {dayEvents.map(task => (
-                                    <CalendarTaskCard key={task.id} task={task} />
+                                    <CalendarTaskCard 
+                                      key={task.id} 
+                                      task={task}
+                                      classColors={classColors}
+                                      onEventClick={onEventClick}
+                                      toggleTask={toggleTask}
+                                      draggedEventId={draggedEventId}
+                                      handleDragStart={handleDragStart}
+                                    />
                                 ))}
                             </div>
                         </div>
@@ -376,7 +457,14 @@ const CalendarView = ({
                                     </div>
 
                                     <div className="flex-1 pb-2">
-                                        <CalendarTaskCard task={task} />
+                                        <CalendarTaskCard 
+                                          task={task}
+                                          classColors={classColors}
+                                          onEventClick={onEventClick}
+                                          toggleTask={toggleTask}
+                                          draggedEventId={draggedEventId}
+                                          handleDragStart={handleDragStart}
+                                        />
                                     </div>
                                 </div>
                             ))}
