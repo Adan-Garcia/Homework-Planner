@@ -1,0 +1,44 @@
+# Cloudflare Pages Security Headers
+# https://developers.cloudflare.com/pages/platform/headers/
+
+/*
+  # Content Security Policy (CSP)
+  # Note: Adjust API domain as needed
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.adangarcia.com https://*.adangarcia.com wss://api.adangarcia.com; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests;
+  
+  # Prevent clickjacking
+  X-Frame-Options: DENY
+  
+  # Prevent MIME sniffing
+  X-Content-Type-Options: nosniff
+  
+  # Enable XSS protection
+  X-XSS-Protection: 1; mode=block
+  
+  # Referrer policy
+  Referrer-Policy: strict-origin-when-cross-origin
+  
+  # Permissions policy
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=()
+
+# Cache static assets aggressively
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+# Don't cache HTML (for updates)
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Cache PWA manifest
+/manifest.webmanifest
+  Cache-Control: public, max-age=86400
+
+# Cache service worker (but allow updates)
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
