@@ -1,4 +1,4 @@
-import React, { forwardRef } from "react";
+import React, { forwardRef, useId } from "react";
 import PropTypes from "prop-types";
 
 /**
@@ -8,7 +8,8 @@ import PropTypes from "prop-types";
  * * Includes ARIA attributes for screen readers
  */
 const Input = forwardRef(({ label, error, className = "", id, ...props }, ref) => {
-  const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+  const autoId = useId();
+  const inputId = id || autoId;
   const errorId = error ? `${inputId}-error` : undefined;
   
   return (

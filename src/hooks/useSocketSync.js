@@ -352,8 +352,8 @@ export const useSocketSync = (
           }
         }
 
-        // Color sync logic...
-        if (serverMeta.classColors) {
+        // Color sync logic - always process meta regardless of events
+        if (serverMeta && serverMeta.classColors) {
             const colors = typeof serverMeta.classColors === "string"
               ? JSON.parse(serverMeta.classColors)
               : serverMeta.classColors;
