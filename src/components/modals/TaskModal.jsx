@@ -47,8 +47,20 @@ const TaskModal = ({ requestDelete }) => {
   // Scope selection for editing recurring events ("single" vs "series")
   const [editScope, setEditScope] = useState("single");
 
+  // Track if modal was just opened to prevent re-initialization while typing
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // --- Initialization ---
   useEffect(() => {
+    // Only initialize when modal opens (transitions from closed to open)
+    if (!isOpen) {
+      setIsInitialized(false);
+      return;
+    }
+
+    // Skip if already initialized (prevents reset while typing)
+    if (isInitialized) return;
+
     if (editingTask) {
       // Edit Mode: Populate form with existing data
       
@@ -88,7 +100,9 @@ const TaskModal = ({ requestDelete }) => {
       });
       setIsAllDay(false);
     }
-  }, [editingTask, isOpen]);
+
+    setIsInitialized(true);
+  }, [editingTask, isOpen, isInitialized, classes]);
 
   // --- Submission Handler ---
   const handleSubmit = (e) => {
