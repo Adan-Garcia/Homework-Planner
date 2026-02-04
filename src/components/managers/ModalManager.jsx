@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useUI } from "../../context/PlannerContext";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
@@ -69,7 +69,7 @@ const ModalManager = () => {
     }
   };
 
-  const handleDeleteTaskConfirm = (deleteAction) => {
+  const handleDeleteTaskConfirm = useCallback((deleteAction) => {
      setConfirmModal({
       isOpen: true,
       title: "Delete Task?",
@@ -80,7 +80,7 @@ const ModalManager = () => {
         closeModal("task");
       },
     });
-  };
+  }, [closeModal]);
 
   const requestResetData = () => {
     setConfirmModal({

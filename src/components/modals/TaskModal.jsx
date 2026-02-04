@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
 import { Trash2, Save, RefreshCw, Layers } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
@@ -47,19 +47,25 @@ const TaskModal = ({ requestDelete }) => {
   // Scope selection for editing recurring events ("single" vs "series")
   const [editScope, setEditScope] = useState("single");
 
-  // Track if modal was just opened to prevent re-initialization while typing
-  const [isInitialized, setIsInitialized] = useState(false);
-
   // --- Initialization ---
+  // Use a ref to track initialization instead of state to avoid triggering re-renders
+  const initRef = useRef({ isOpen: false, taskId: null });
+
   useEffect(() => {
-    // Only initialize when modal opens (transitions from closed to open)
+    // Only initialize when modal opens or when editing a different task
+    const taskId = editingTask?.id || null;
+    const shouldInitialize = isOpen && (
+      !initRef.current.isOpen || 
+      initRef.current.taskId !== taskId
+    );
+
     if (!isOpen) {
-      setIsInitialized(false);
+      initRef.current.isOpen = false;
+      initRef.current.taskId = null;
       return;
     }
 
-    // Skip if already initialized (prevents reset while typing)
-    if (isInitialized) return;
+    if (!shouldInitialize) return;
 
     if (editingTask) {
       // Edit Mode: Populate form with existing data
@@ -101,11 +107,68 @@ const TaskModal = ({ requestDelete }) => {
       setIsAllDay(false);
     }
 
-    setIsInitialized(true);
-  }, [editingTask, isOpen, isInitialized, classes]);
+    initRef.current.isOpen = true;
+    initRef.current.taskId = taskId;
+  }, [editingTask, isOpen]);
+  
+  // Separate effect to update class if it becomes invalid (classes array changed)
+  useEffect(() => {
+    if (formData.class && classes.length > 0 && !classes.includes(formData.class)) {
+      setFormData(prev => ({ ...prev, class: classes[0] }));
+    }
+  }, [classes, formData.class]);
+
+  // --- Memoized Change Handlers ---
+  const handleTitleChange = useCallback((e) => {
+    if (e.target.value.length <= MAX_TASK_TITLE_LENGTH) {
+      setFormData(prev => ({ ...prev, title: e.target.value }));
+    }
+  }, []);
+
+  const handleDescriptionChange = useCallback((e) => {
+    if (e.target.value.length <= MAX_TASK_DESCRIPTION_LENGTH) {
+      setFormData(prev => ({ ...prev, description: e.target.value }));
+    }
+  }, []);
+
+  const handleClassChange = useCallback((e) => {
+    setFormData(prev => ({ ...prev, class: e.target.value }));
+  }, []);
+
+  const handleTypeChange = useCallback((e) => {
+    setFormData(prev => ({ ...prev, type: e.target.value }));
+  }, []);
+
+  const handleDateChange = useCallback((e) => {
+    setFormData(prev => ({ ...prev, date: e.target.value }));
+  }, []);
+
+  const handleTimeChange = useCallback((e) => {
+    setFormData(prev => ({ ...prev, time: e.target.value }));
+  }, []);
+
+  const handlePriorityChange = useCallback((e) => {
+    setFormData(prev => ({ ...prev, priority: e.target.value }));
+  }, []);
+
+  const handleRecurrenceChange = useCallback((e) => {
+    setFormData(prev => ({ ...prev, recurrence: e.target.value }));
+  }, []);
+
+  const handleRecurrenceEndChange = useCallback((e) => {
+    setFormData(prev => ({ ...prev, recurrenceEnd: e.target.value }));
+  }, []);
+
+  const handleAllDayChange = useCallback((e) => {
+    setIsAllDay(e.target.checked);
+  }, []);
+
+  const handleEditScopeChange = useCallback((value) => {
+    setEditScope(value);
+  }, []);
 
   // --- Submission Handler ---
-  const handleSubmit = (e) => {
+  const handleSubmit = useCallback((e) => {
     e.preventDefault();
     
     // Validate required fields
@@ -164,9 +227,9 @@ const TaskModal = ({ requestDelete }) => {
       addEvent(finalData);
     }
     closeModal("task");
-  };
+  }, [formData, isAllDay, editingTask, editScope, notify, updateEvent, addEvent, closeModal]);
 
-  const handleDeleteClick = () => {
+  const handleDeleteClick = useCallback(() => {
     if (!editingTask) return;
     
     // Determine deletion scope based on UI selection
@@ -182,9 +245,13 @@ const TaskModal = ({ requestDelete }) => {
         closeModal("task");
       }
     }
-  };
+  }, [editingTask, editScope, requestDelete, deleteEvent, closeModal]);
 
-  const footer = (
+  const handleCloseModal = useCallback(() => {
+    closeModal("task");
+  }, [closeModal]);
+
+  const footer = useMemo(() => (
     <>
       {editingTask && (
         <Button 
@@ -196,19 +263,19 @@ const TaskModal = ({ requestDelete }) => {
           Delete
         </Button>
       )}
-      <Button variant="ghost" onClick={() => closeModal("task")}>
+      <Button variant="ghost" onClick={handleCloseModal}>
         Cancel
       </Button>
       <Button variant="primary" onClick={handleSubmit} icon={Save}>
         {editingTask ? "Save Changes" : "Create Task"}
       </Button>
     </>
-  );
+  ), [editingTask, handleDeleteClick, handleCloseModal, handleSubmit]);
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={() => closeModal("task")}
+      onClose={handleCloseModal}
       title={editingTask ? "Edit Task" : "New Task"}
       footer={footer}
       size="md"
@@ -216,13 +283,10 @@ const TaskModal = ({ requestDelete }) => {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <Input
+            id="task-title-input"
             label="Task Title"
             value={formData.title}
-            onChange={(e) => {
-              if (e.target.value.length <= MAX_TASK_TITLE_LENGTH) {
-                setFormData({ ...formData, title: e.target.value });
-              }
-            }}
+            onChange={handleTitleChange}
             placeholder="e.g. Calculus Chapter 4"
             required
             autoFocus
@@ -245,7 +309,7 @@ const TaskModal = ({ requestDelete }) => {
             <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Class</label>
             <select
               value={formData.class}
-              onChange={(e) => setFormData({ ...formData, class: e.target.value })}
+              onChange={handleClassChange}
               className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
               aria-label="Select class"
               aria-required="true"
@@ -262,7 +326,7 @@ const TaskModal = ({ requestDelete }) => {
             <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Type</label>
             <select
               value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+              onChange={handleTypeChange}
               className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
               aria-label="Select task type"
             >
@@ -278,7 +342,7 @@ const TaskModal = ({ requestDelete }) => {
             label="Date"
             type="date"
             value={formData.date}
-            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+            onChange={handleDateChange}
             required
           />
           
@@ -291,7 +355,7 @@ const TaskModal = ({ requestDelete }) => {
                         type="checkbox" 
                         id="allDay" 
                         checked={isAllDay} 
-                        onChange={(e) => setIsAllDay(e.target.checked)}
+                        onChange={handleAllDayChange}
                         className="w-3 h-3 accent-blue-600 rounded cursor-pointer"
                     />
                     <label htmlFor="allDay" className="text-[10px] font-bold text-blue-600 dark:text-blue-400 cursor-pointer">All Day</label>
@@ -303,7 +367,7 @@ const TaskModal = ({ requestDelete }) => {
                     value={formData.time}
                     disabled={isAllDay}
                     pattern="[0-9]{2}:[0-9]{2}"
-                    onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                    onChange={handleTimeChange}
                     className={`
                         w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none 
                         ${isAllDay ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800" : "focus:ring-2 focus:ring-blue-500/20"}
@@ -316,7 +380,7 @@ const TaskModal = ({ requestDelete }) => {
             <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Priority</label>
             <select
               value={formData.priority}
-              onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+              onChange={handlePriorityChange}
               className={`w-full p-2.5 rounded-lg border-input surface-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20 ${
                 formData.priority === "High" ? "text-red-500 font-bold" : "text-input"
               }`}
@@ -329,15 +393,12 @@ const TaskModal = ({ requestDelete }) => {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Description</label>
+          <label htmlFor="task-description-textarea" className="text-[10px] font-bold uppercase tracking-wider text-secondary">Description</label>
           <textarea
+            id="task-description-textarea"
             rows={3}
             value={formData.description}
-            onChange={(e) => {
-              if (e.target.value.length <= MAX_TASK_DESCRIPTION_LENGTH) {
-                setFormData({ ...formData, description: e.target.value });
-              }
-            }}
+            onChange={handleDescriptionChange}
             className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none resize-none"
             placeholder="Add details, links, or notes..."
             aria-label="Task description"
@@ -363,7 +424,7 @@ const TaskModal = ({ requestDelete }) => {
                <div className="grid grid-cols-2 gap-3">
                    <select
                         value={formData.recurrence}
-                        onChange={(e) => setFormData({ ...formData, recurrence: e.target.value })}
+                        onChange={handleRecurrenceChange}
                         className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs dark:text-white outline-none"
                    >
                        <option value="none">No Repeat</option>
@@ -373,7 +434,7 @@ const TaskModal = ({ requestDelete }) => {
                    <input 
                         type="date"
                         value={formData.recurrenceEnd}
-                        onChange={(e) => setFormData({ ...formData, recurrenceEnd: e.target.value })}
+                        onChange={handleRecurrenceEndChange}
                         disabled={formData.recurrence === 'none'}
                         className={`w-full p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs dark:text-white outline-none ${formData.recurrence === 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
                    />
@@ -394,7 +455,7 @@ const TaskModal = ({ requestDelete }) => {
                                 name="editScope" 
                                 value="single" 
                                 checked={editScope === "single"}
-                                onChange={() => setEditScope("single")}
+                                onChange={() => handleEditScopeChange("single")}
                                 className="accent-amber-500"
                             />
                             This Event Only
@@ -405,7 +466,7 @@ const TaskModal = ({ requestDelete }) => {
                                 name="editScope" 
                                 value="series" 
                                 checked={editScope === "series"}
-                                onChange={() => setEditScope("series")}
+                                onChange={() => handleEditScopeChange("series")}
                                 className="accent-amber-500"
                             />
                             Entire Series
@@ -423,4 +484,4 @@ TaskModal.propTypes = {
   requestDelete: PropTypes.func,
 };
 
-export default TaskModal;
+export default React.memo(TaskModal);
