@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { format, parse } from "date-fns";
 import { Check, Clock, Calendar, AlertCircle, GripVertical, X, Filter, Circle, ChevronDown } from "lucide-react";
 import { isToday, isTomorrow, isPast, parseISO } from "date-fns";
 import Input from "../../ui/Input";
@@ -10,6 +11,24 @@ import { useDragDrop } from "../../../context/DragDropContext";
 const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
   const { draggedEventId, handleDragStart } = useDragDrop();
 
+  // Helper to format time in 12-hour format
+  const get12HourTime = (timeStr) => {
+    if (!timeStr) return '';
+    // Try parsing as HH:mm or H:mm
+    let parsed;
+    try {
+      parsed = parse(timeStr, 'HH:mm', new Date());
+      if (isNaN(parsed)) parsed = parse(timeStr, 'H:mm', new Date());
+      if (isNaN(parsed)) return timeStr; // fallback
+      return format(parsed, 'h:mm a');
+    } catch {
+      return timeStr;
+    }
+  };
+
+  // Concatenated event name: Class: Title
+  const eventName = `${task.class ? task.class + ': ' : ''}${task.title}`;
+
   return (
     <div
       draggable={!task.completed}
@@ -17,7 +36,7 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
       onClick={() => openEditTaskModal(task)}
       role="button"
       tabIndex={0}
-      aria-label={`${task.title}, ${task.class}, ${task.type}, ${task.completed ? 'completed' : 'incomplete'}${task.time ? `, due at ${task.time}` : ''}`}
+      aria-label={`${eventName}, ${task.type}, ${task.completed ? 'completed' : 'incomplete'}${task.time ? `, due at ${get12HourTime(task.time)}` : ''}`}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -54,21 +73,21 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
       
       <div className="flex-1 min-w-0 py-0.5">
         <div className="flex items-center justify-between gap-2 mb-1.5">
-           <div className="flex items-center gap-1.5 min-w-0">
+           <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <span className="w-2 h-2 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: classColors?.[task.class] || "#cbd5e1" }} />
                 <span className="text-[10px] font-bold uppercase tracking-wider text-secondary truncate opacity-80">
                     {task.class}
                 </span>
            </div>
            {task.time && (
-            <span className="text-[10px] font-medium text-secondary flex items-center gap-1 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
-              {task.time}
+            <span className="text-[10px] font-medium text-secondary flex items-center gap-1 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full flex-shrink-0 max-w-full">
+              {get12HourTime(task.time)}
             </span>
            )}
         </div>
         
         <p className={`text-sm font-medium leading-snug transition-colors ${task.completed ? "text-secondary line-through" : "text-primary"}`}>
-          {task.title}
+          {eventName}
         </p>
         
         <div className="flex items-center gap-2 mt-2">
@@ -147,13 +166,14 @@ const DropZone = ({
             <ChevronDown className={`w-3.5 h-3.5 opacity-50 transition-transform duration-200 ${isOpen ? "rotate-0" : "-rotate-90"}`} />
         </div>
       </button>
-      
-      {/* Task List (Expandable) */}
+
+      {/* Task List (Expandable, Scrollable) */}
       <div className={`
         flex flex-col gap-3 transition-all duration-300 origin-top
-        ${isOpen ? "opacity-100 max-h-[1000px]" : "opacity-0 max-h-0 overflow-hidden"}
+        ${isOpen ? "opacity-100 max-h-[350px] overflow-y-auto overflow-x-hidden" : "opacity-0 max-h-0 overflow-hidden"}
         ${draggedEventId ? "min-h-[20px] rounded-3xl" : ""}
         ${draggedEventId && isOpen ? "p-3 bg-blue-50/50 dark:bg-blue-900/10 border-2 border-dashed border-blue-200 dark:border-blue-800" : ""}
+        custom-scrollbar
       `}>
         {items && items.map((task) => (
           <TaskItem 

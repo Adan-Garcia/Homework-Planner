@@ -35,17 +35,22 @@ self.onmessage = ({ data: text }) => {
 
       if (className) foundClasses.add(className);
 
+      const jsDate = startDate.toJSDate();
+      // Format local date as YYYY-MM-DD
+      const localDate = jsDate.getFullYear() + "-" +
+        String(jsDate.getMonth() + 1).padStart(2, '0') + "-" +
+        String(jsDate.getDate()).padStart(2, '0');
+
       events.push({
         id: crypto.randomUUID(), // Generate a local ID for immediate use
         title: summary,
         description: description,
         location: location,
-        // Convert ICal time to simplified ISO string (YYYY-MM-DD)
-        date: startDate.toJSDate().toISOString().split("T")[0],
+        date: localDate,
         // Handle All-Day events vs Time-based events
         time: startDate.isDate
           ? null
-          : startDate.toJSDate().toTimeString().substring(0, 5),
+          : jsDate.toTimeString().substring(0, 5),
         type: type,
         class: className || "General",
         completed: false,
