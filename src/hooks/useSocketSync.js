@@ -36,6 +36,7 @@ export const useSocketSync = (
   const socketRef = useRef(null);
   const notify = useNotification();
   const notifyRef = useRef(notify);
+  const reconnectAttemptsRef = useRef(0);
 
   /**
    * Critical: Use refs instead of direct state dependencies for socket callbacks
@@ -228,6 +229,13 @@ export const useSocketSync = (
       setEvents((prev) => prev.filter((e) => e.id !== eventId));
     };
 
+    const handleBulkEventRemove = (eventIds) => {
+      if (!Array.isArray(eventIds) || eventIds.length === 0) return;
+      logger.log("[Sync] Received bulk remove", eventIds.length, "events");
+      const idSet = new Set(eventIds);
+      setEvents((prev) => prev.filter((e) => !idSet.has(e.id)));
+    };
+
     const handleMetaSync = (meta) => {
       if (!meta || !meta.classColors) return;
       try {
@@ -254,6 +262,7 @@ export const useSocketSync = (
     newSocket.off(SOCKET_EVENTS.EVENT_SYNC);
     newSocket.off(SOCKET_EVENTS.EVENT_BULK_SYNC);
     newSocket.off(SOCKET_EVENTS.EVENT_REMOVE);
+    newSocket.off(SOCKET_EVENTS.EVENT_BULK_REMOVE);
     newSocket.off(SOCKET_EVENTS.META_SYNC);
     newSocket.off(SOCKET_EVENTS.ROOM_COUNT);
     newSocket.off(SOCKET_EVENTS.CONNECT);
@@ -263,18 +272,21 @@ export const useSocketSync = (
     newSocket.on(SOCKET_EVENTS.EVENT_SYNC, handleEventSync);
     newSocket.on(SOCKET_EVENTS.EVENT_BULK_SYNC, handleBulkEventSync);
     newSocket.on(SOCKET_EVENTS.EVENT_REMOVE, handleEventRemove);
+    newSocket.on(SOCKET_EVENTS.EVENT_BULK_REMOVE, handleBulkEventRemove);
     newSocket.on(SOCKET_EVENTS.META_SYNC, handleMetaSync);
     newSocket.on(SOCKET_EVENTS.ROOM_COUNT, handleRoomCount);
     newSocket.on(SOCKET_EVENTS.CONNECT, () => {
       logger.log("[Sync] Connected, joining room:", roomId);
-      setReconnectAttempts(0); // Reset on successful connection
+      setReconnectAttempts(0);
+      reconnectAttemptsRef.current = 0; // Reset ref too
       newSocket.emit(SOCKET_EVENTS.JOIN, roomId);
     });
     newSocket.on(SOCKET_EVENTS.CONNECT_ERROR, (err) => {
       logger.error("[Sync] Connection error:", err);
-      setReconnectAttempts(prev => prev + 1);
-      const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-      logger.log(`[Sync] Will retry in ${backoffDelay}ms (attempt ${reconnectAttempts + 1})`);
+      reconnectAttemptsRef.current += 1;
+      setReconnectAttempts(reconnectAttemptsRef.current);
+      const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+      logger.log(`[Sync] Will retry in ${backoffDelay}ms (attempt ${reconnectAttemptsRef.current})`);
       notifyRef.current.error(`Sync connection error. Retrying in ${backoffDelay / 1000}s...`);
     });
     newSocket.on(SOCKET_EVENTS.DISCONNECT, () => {
@@ -337,18 +349,25 @@ export const useSocketSync = (
           }
           setEvents(validEvents);
         } else {
-          // Re-seed logic
-          const currentLocal = localEventsRef.current;
-          if (currentLocal && currentLocal.length > 0) {
-            logger.log(`[Sync] Re-seeding ${currentLocal.length} events.`);
-            const encryptedEvents = await Promise.all(
-              currentLocal.map((e) => encryptEvent(e, cryptoKey)),
-            );
-            await emitAsync(
-              SOCKET_EVENTS.EVENT_BULK_SAVE,
-              { roomId, events: encryptedEvents },
-              newSocket,
-            );
+          // Re-seed logic: Only re-upload local events on the FIRST connection
+          // to avoid resurrecting events that were deleted from another client.
+          if (!isInitialLoadDone.current) {
+            const currentLocal = localEventsRef.current;
+            if (currentLocal && currentLocal.length > 0) {
+              logger.log(`[Sync] First connection with empty server — re-seeding ${currentLocal.length} events.`);
+              const encryptedEvents = await Promise.all(
+                currentLocal.map((e) => encryptEvent(e, cryptoKey)),
+              );
+              await emitAsync(
+                SOCKET_EVENTS.EVENT_BULK_SAVE,
+                { roomId, events: encryptedEvents },
+                newSocket,
+              );
+            }
+          } else {
+            // On reconnect, server is empty — respect that (other client may have cleared)
+            logger.log("[Sync] Server has 0 events on reconnect. Clearing local state.");
+            setEvents([]);
           }
         }
 
@@ -383,6 +402,7 @@ export const useSocketSync = (
       newSocket.off(SOCKET_EVENTS.EVENT_SYNC, handleEventSync);
       newSocket.off(SOCKET_EVENTS.EVENT_BULK_SYNC, handleBulkEventSync);
       newSocket.off(SOCKET_EVENTS.EVENT_REMOVE, handleEventRemove);
+      newSocket.off(SOCKET_EVENTS.EVENT_BULK_REMOVE, handleBulkEventRemove);
       newSocket.off(SOCKET_EVENTS.META_SYNC, handleMetaSync);
       newSocket.off(SOCKET_EVENTS.ROOM_COUNT, handleRoomCount);
       newSocket.off(SOCKET_EVENTS.CONNECT);
@@ -508,16 +528,23 @@ export const useSocketSync = (
       }
     }, [socket, roomId]);
 
-  const clearAllEvents = useCallback(async () => {
+  const clearAllEvents = useCallback(async (idsToDelete) => {
     const previousEvents = localEventsRef.current || [];
-    setEvents([]); 
+    
+    // Determine target IDs: if idsToDelete is array, use it. Else use all.
+    const targets = Array.isArray(idsToDelete) ? idsToDelete : previousEvents.map(e => e.id);
+    
+    if (targets.length === 0) return;
+
+    // Optimistic update
+    setEvents((prev) => prev.filter(e => !targets.includes(e.id)));
+    
     if (!socket) return;
     try {
-      const eventIds = previousEvents.map((e) => e.id);
-      await emitAsync(SOCKET_EVENTS.EVENT_BULK_DELETE, { roomId, eventIds });
+      await emitAsync(SOCKET_EVENTS.EVENT_BULK_DELETE, { roomId, eventIds: targets });
     } catch (err) {
-      logger.error("Clear all failed:", err);
-      notifyRef.current.error("Failed to clear all events. Changes were rolled back.");
+      logger.error("Clear/Bulk delete failed:", err);
+      notifyRef.current.error("Failed to delete events. Changes were rolled back.");
       setEvents(previousEvents);
     }
   }, [socket, roomId, setEvents]);

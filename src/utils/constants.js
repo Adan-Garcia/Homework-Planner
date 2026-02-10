@@ -21,7 +21,7 @@ export const STORAGE_KEYS = {
 };
 
 // --- Socket & Network Configuration ---
-export const SOCKET_TIMEOUT_MS = 5000; // 5 second timeout for socket operations
+export const SOCKET_TIMEOUT_MS = 10000; // 10 second timeout for socket operations
 export const SOCKET_RECONNECT_DELAY_MS = 1000; // Delay before reconnecting
 export const SOCKET_PATH = "/backend/socket.io"; // Socket.io server path
 
@@ -33,6 +33,7 @@ export const SOCKET_EVENTS = {
   EVENT_SYNC: "event:sync",
   EVENT_BULK_SYNC: "event:bulk_sync",
   EVENT_REMOVE: "event:remove",
+  EVENT_BULK_REMOVE: "event:bulk_remove",
   EVENT_SAVE: "event:save",
   EVENT_BULK_SAVE: "event:bulk_save",
   EVENT_DELETE: "event:delete",

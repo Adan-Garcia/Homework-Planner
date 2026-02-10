@@ -299,7 +299,26 @@ export const DataProvider = ({ children }) => {
           (e) => e.groupId === event.groupId,
         );
 
+        // Apply all changes locally first in one batch
+        setEvents((prev) =>
+          prev.map((e) => {
+            if (e.groupId === event.groupId) {
+              return {
+                ...e,
+                title,
+                description,
+                time,
+                type,
+                priority,
+                class: className,
+              };
+            }
+            return e;
+          }),
+        );
+
         if (isAuthorized) {
+          // Then sync each to server (local state already updated)
           siblings.forEach((sibling) => {
             serverUpdate({
               ...sibling,
@@ -311,23 +330,6 @@ export const DataProvider = ({ children }) => {
               class: className,
             });
           });
-        } else {
-          setEvents((prev) =>
-            prev.map((e) => {
-              if (e.groupId === event.groupId) {
-                return {
-                  ...e,
-                  title,
-                  description,
-                  time,
-                  type,
-                  priority,
-                  class: className,
-                };
-              }
-              return e;
-            }),
-          );
         }
       } else {
         // Standard single event update
@@ -346,23 +348,18 @@ export const DataProvider = ({ children }) => {
   const deleteEvent = useCallback(
     (id, deleteSeries = false, groupId = null) => {
       if (deleteSeries && groupId) {
-        // Find all siblings to delete
-        const eventsToDelete = eventsRef.current.filter(e => e.groupId === groupId);
-        
-        if (isAuthorized) {
-           // Server: Send individual delete commands (or bulk delete if implemented)
-           eventsToDelete.forEach(ev => serverDelete(ev.id));
-        } else {
-           // Local: Filter out the whole group
-           setEvents((prev) => prev.filter((e) => e.groupId !== groupId));
-        }
+        // Bulk delete entire series in one operation to avoid rate limiting
+        const idsToDelete = eventsRef.current
+          .filter(e => e.groupId === groupId)
+          .map(e => e.id);
+        bulkDeleteEvents(idsToDelete);
       } else {
         // Single delete
         if (isAuthorized) serverDelete(id);
         else setEvents((prev) => prev.filter((e) => e.id !== id));
       }
     },
-    [isAuthorized, serverDelete],
+    [isAuthorized, serverDelete, bulkDeleteEvents],
   );
 
   const handleSetClassColors = useCallback(
@@ -409,13 +406,19 @@ export const DataProvider = ({ children }) => {
     (source, target) => {
       // Find all tasks in source class and move them to target class
       const tasksToUpdate = events.filter((e) => e.class === source);
-      tasksToUpdate.forEach((task) => {
-        if (isAuthorized) serverUpdate({ ...task, class: target });
-        else
-          setEvents((prev) =>
-            prev.map((e) => (e.id === task.id ? { ...e, class: target } : e)),
-          );
-      });
+      const updatedTasks = tasksToUpdate.map((task) => ({ ...task, class: target }));
+      
+      if (isAuthorized && updatedTasks.length > 0) {
+        // Bulk update: apply locally then sync all at once
+        setEvents((prev) =>
+          prev.map((e) => (e.class === source ? { ...e, class: target } : e)),
+        );
+        updatedTasks.forEach((task) => serverUpdate(task));
+      } else {
+        setEvents((prev) =>
+          prev.map((e) => (e.class === source ? { ...e, class: target } : e)),
+        );
+      }
       // Remove the old color entry
       const newColors = { ...classColors };
       delete newColors[source];
@@ -428,13 +431,17 @@ export const DataProvider = ({ children }) => {
     (oldName, newName) => {
       if (!oldName || !newName || oldName === newName) return;
       const tasksToUpdate = events.filter((e) => e.class === oldName);
-      tasksToUpdate.forEach((task) => {
-        if (isAuthorized) serverUpdate({ ...task, class: newName });
-        else
-          setEvents((prev) =>
-            prev.map((e) => (e.id === task.id ? { ...e, class: newName } : e)),
-          );
-      });
+      const updatedTasks = tasksToUpdate.map((task) => ({ ...task, class: newName }));
+      
+      // Apply local state change in one batch
+      setEvents((prev) =>
+        prev.map((e) => (e.class === oldName ? { ...e, class: newName } : e)),
+      );
+      
+      if (isAuthorized && updatedTasks.length > 0) {
+        updatedTasks.forEach((task) => serverUpdate(task));
+      }
+      
       const next = { ...classColors };
       next[newName] = next[oldName];
       delete next[oldName];
