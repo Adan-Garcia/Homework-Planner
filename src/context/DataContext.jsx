@@ -1,16 +1,3 @@
-  // Bulk delete events by IDs
-  const bulkDeleteEvents = useCallback(
-    (ids) => {
-      if (!ids || ids.length === 0) return;
-      if (isAuthorized) {
-        // Use socket bulk delete
-        serverClear(ids);
-      } else {
-        setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
-      }
-    },
-    [isAuthorized, serverClear],
-  );
 import React, {
   createContext,
   useContext,
@@ -18,6 +5,8 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  // Bulk delete events by IDs
+  // (moved below imports)
   useRef,
 } from "react";
 import { addDays, format, parseISO, isAfter } from "date-fns";
@@ -71,6 +60,7 @@ const loadState = (key, fallback) => {
  * addEvent({ title: "Homework", date: "2026-02-15", class: "Math" });
  */
 export const DataProvider = ({ children }) => {
+
   const { roomId, authToken, cryptoKey, isAuthorized } = useAuth();
   const notify = useNotification();
 
@@ -184,25 +174,36 @@ export const DataProvider = ({ children }) => {
     classColors,
   );
 
-  // --- Business Logic ---
+  // Bulk delete events by IDs
+  const bulkDeleteEvents = useCallback(
+    (ids) => {
+      if (!ids || ids.length === 0) return;
+      if (isAuthorized) {
+        // Use socket bulk delete
+        serverClear(ids);
+      } else {
+        setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
+      }
+    },
+    [isAuthorized, serverClear],
+  );
 
-  /**
-   * Bulk Add Events
-   * Handles adding multiple events at once (e.g. from imports).
-   * Uses server sync if authorized, otherwise updates local state.
-   */
+  // Bulk add events
   const bulkAddEvents = useCallback(
     (newEvents) => {
-      if (isAuthorized) serverBulkAdd(newEvents);
-      else setEvents((prev) => [...prev, ...newEvents]);
+      if (!newEvents || newEvents.length === 0) return;
+      if (isAuthorized) {
+        serverBulkAdd(newEvents);
+      } else {
+        setEvents((prev) => [...prev, ...newEvents]);
+      }
     },
-    [isAuthorized, serverBulkAdd],
+    [isAuthorized, serverBulkAdd, setEvents],
   );
 
   /**
-   * Add Event (with Recurrence Logic)
-   * * If an event is marked as recurring:
-   * 1. It calculates the interval (7 days for weekly).
+   * Adds a new event to the calendar.
+   * 1. Validates the event structure.
    * 2. Generates individual event instances from start date to end date.
    * 3. Assigns a common `groupId` to all instances for future batch edits.
    */
