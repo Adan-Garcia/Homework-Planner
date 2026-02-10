@@ -498,7 +498,9 @@ export const useSocketSync = (
       if (!socket) return;
       const previousColors = localColorsRef.current;
       try {
-        await emitAsync(SOCKET_EVENTS.META_SAVE, { roomId, meta: { classColors: colors } });
+        // Stringify to pass server validation which rejects objects in meta values
+        const payload = JSON.stringify(colors);
+        await emitAsync(SOCKET_EVENTS.META_SAVE, { roomId, meta: { classColors: payload } });
       } catch (err) {
         logger.error("Color sync failed:", err);
         notifyRef.current.error("Color sync failed. Changes were rolled back.");

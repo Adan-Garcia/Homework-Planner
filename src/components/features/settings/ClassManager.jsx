@@ -62,7 +62,7 @@ const ClassManager = ({
               cls={cls}
               color={classColors[cls]}
               onColorChange={(c, newColor) =>
-                setClassColors((prev) => ({ ...prev, [c]: newColor }))
+                setClassColors({ ...classColors, [c]: newColor })
               }
               onDelete={onDeleteClass}
               onRename={onRenameClass}
