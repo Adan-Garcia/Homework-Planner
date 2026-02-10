@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import { useData } from "../../../context/DataContext";
 
 const DateCleanerContent = ({ onCloseModal }) => {
-  const { events, deleteEvent } = useData();
+  const { events, bulkDeleteEvents } = useData();
   const [beforeDate, setBeforeDate] = useState("");
   const [afterDate, setAfterDate] = useState("");
 
@@ -30,9 +30,10 @@ const DateCleanerContent = ({ onCloseModal }) => {
       return;
     }
 
-    eventsToDelete.forEach((ev) => {
-      if (ev.id) deleteEvent(ev.id);
-    });
+
+    // Use bulk delete for all matching events
+    const idsToDelete = eventsToDelete.map(ev => ev.id).filter(Boolean);
+    bulkDeleteEvents(idsToDelete);
 
     alert(`Deleted ${eventsToDelete.length} events.`);
     onCloseModal();

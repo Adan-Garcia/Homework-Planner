@@ -1,3 +1,16 @@
+  // Bulk delete events by IDs
+  const bulkDeleteEvents = useCallback(
+    (ids) => {
+      if (!ids || ids.length === 0) return;
+      if (isAuthorized) {
+        // Use socket bulk delete
+        serverClear(ids);
+      } else {
+        setEvents((prev) => prev.filter((e) => !ids.includes(e.id)));
+      }
+    },
+    [isAuthorized, serverClear],
+  );
 import React, {
   createContext,
   useContext,
@@ -380,11 +393,15 @@ export const DataProvider = ({ children }) => {
   
   const deleteClass = useCallback(
     (className) => {
+      // Bulk delete all events for this class
+      const idsToDelete = eventsRef.current.filter(e => e.class === className).map(e => e.id);
+      bulkDeleteEvents(idsToDelete);
+      // Remove color
       const newColors = { ...classColors };
       delete newColors[className];
       handleSetClassColors(newColors);
     },
-    [classColors, handleSetClassColors],
+    [classColors, handleSetClassColors, bulkDeleteEvents],
   );
 
   const mergeClasses = useCallback(
