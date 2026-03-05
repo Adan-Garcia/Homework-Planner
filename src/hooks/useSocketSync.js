@@ -3,6 +3,7 @@ import { io } from "socket.io-client";
 import { getApiBaseUrl, SOCKET_EVENTS, SOCKET_TIMEOUT_MS, SOCKET_PATH } from "../utils/constants";
 import { encryptEvent, decryptEvent } from "../utils/crypto";
 import { normalizeEvent, validateEvent } from "../utils/helpers";
+import { fieldLevelMerge, lastWriteWins } from "../utils/mergeUtils";
 import { useNotification } from "../context/NotificationContext";
 import logger from "../utils/logger";
 
@@ -37,6 +38,21 @@ export const useSocketSync = (
   const notify = useNotification();
   const notifyRef = useRef(notify);
   const reconnectAttemptsRef = useRef(0);
+
+  /**
+   * Sync version map: tracks the server version for each event ID.
+   * Used for optimistic concurrency control — sent with updates so the
+   * server can detect conflicts.
+   * Key: event ID, Value: version number (integer)
+   */
+  const versionMapRef = useRef(new Map());
+
+  /**
+   * Base event map: stores the last-known-good copy of each event (before local edits).
+   * Used as the common ancestor for three-way field-level merge when conflicts occur.
+   * Key: event ID, Value: plain-text event object
+   */
+  const baseEventsRef = useRef(new Map());
 
   /**
    * Critical: Use refs instead of direct state dependencies for socket callbacks
@@ -152,6 +168,10 @@ export const useSocketSync = (
       }
       return;
     }
+
+    // Reset for this connection cycle — prevents stale flag from a previous
+    // effect run causing the "reconnect" branch to wipe local data.
+    isInitialLoadDone.current = false;
     
     // 1. Establish connection with CREDENTIALS
     // We turn off autoConnect to ensure we can set auth headers before connecting
@@ -173,6 +193,8 @@ export const useSocketSync = (
     const handleEventSync = async (encryptedEvent) => {
       try {
         logger.log("[Sync] Received event update");
+        // Extract version before decryption (version is unencrypted metadata)
+        const serverVersion = encryptedEvent.version;
         const decrypted = await decryptEvent(encryptedEvent, cryptoKey);
         const normalized = normalizeEvent(decrypted);
         if (!normalized) {
@@ -184,9 +206,13 @@ export const useSocketSync = (
           notifyRef.current.warning("Received malformed event (ignored).", 5000);
           return;
         }
+        // Update version map and base event with the incoming server state
+        if (typeof serverVersion === 'number') {
+          versionMapRef.current.set(normalized.id, serverVersion);
+        }
+        baseEventsRef.current.set(normalized.id, { ...normalized });
         setEvents((prev) => {
           const exists = prev.find((e) => e.id === normalized.id);
-          // If the timestamp/version is identical, ignore? (Optional optimization)
           if (exists) {
             return prev.map((e) => (e.id === normalized.id ? normalized : e));
           }
@@ -201,6 +227,8 @@ export const useSocketSync = (
     const handleBulkEventSync = async (encryptedEvents) => {
       try {
         logger.log("[Sync] Received bulk update", encryptedEvents.length);
+        // Extract versions before decryption
+        const versions = encryptedEvents.map(e => ({ id: e.id, version: e.version }));
         const decryptedList = await Promise.all(
           encryptedEvents.map((e) => decryptEvent(e, cryptoKey)),
         );
@@ -212,6 +240,15 @@ export const useSocketSync = (
         );
         if (validEvents.length !== normalized.length) {
           notifyRef.current.warning("Some synced events were invalid and ignored.");
+        }
+        // Update version map and base events
+        for (const v of versions) {
+          if (v.id && typeof v.version === 'number') {
+            versionMapRef.current.set(v.id, v.version);
+          }
+        }
+        for (const event of validEvents) {
+          baseEventsRef.current.set(event.id, { ...event });
         }
         setEvents((prev) => {
           const newMap = new Map(prev.map((e) => [e.id, e]));
@@ -226,6 +263,8 @@ export const useSocketSync = (
 
     const handleEventRemove = (eventId) => {
       logger.log("[Sync] Received remove event", eventId);
+      versionMapRef.current.delete(eventId);
+      baseEventsRef.current.delete(eventId);
       setEvents((prev) => prev.filter((e) => e.id !== eventId));
     };
 
@@ -233,6 +272,10 @@ export const useSocketSync = (
       if (!Array.isArray(eventIds) || eventIds.length === 0) return;
       logger.log("[Sync] Received bulk remove", eventIds.length, "events");
       const idSet = new Set(eventIds);
+      for (const id of eventIds) {
+        versionMapRef.current.delete(id);
+        baseEventsRef.current.delete(id);
+      }
       setEvents((prev) => prev.filter((e) => !idSet.has(e.id)));
     };
 
@@ -317,12 +360,18 @@ export const useSocketSync = (
       try {
         // Wait for socket connection before attempting any emits
         await connectionReady;
+
+        // Guard: if the effect was cleaned up while we awaited, bail out.
+        if (abortController.signal.aborted) return;
         
         logger.log(`[Sync] Fetching events for room: ${roomId}`);
         const res = await fetch(`${getApiBaseUrl()}/api/rooms/${roomId}/events`, {
           headers: { Authorization: `Bearer ${authToken}` },
           signal: abortController.signal,
         });
+
+        // Guard: abort may have fired right after fetch completed.
+        if (abortController.signal.aborted) return;
 
         if (!res.ok) {
             logger.error(`[Sync] Fetch failed: ${res.status}`);
@@ -335,6 +384,13 @@ export const useSocketSync = (
         let serverMeta = data.meta || {};
 
         if (rawEvents.length > 0) {
+          // Build version map from server data (version is unencrypted)
+          versionMapRef.current.clear();
+          for (const rawEvent of rawEvents) {
+            if (rawEvent.id && typeof rawEvent.version === 'number') {
+              versionMapRef.current.set(rawEvent.id, rawEvent.version);
+            }
+          }
           const decryptedEvents = await Promise.all(
             rawEvents.map((e) => decryptEvent(e, cryptoKey)),
           );
@@ -347,27 +403,83 @@ export const useSocketSync = (
           if (validEvents.length !== normalized.length) {
             notifyRef.current.warning("Some imported events were invalid and ignored.");
           }
-          setEvents(validEvents);
+          // Populate base events for future three-way merges
+          baseEventsRef.current.clear();
+          for (const event of validEvents) {
+            baseEventsRef.current.set(event.id, { ...event });
+          }
+          // Merge with local state to preserve any optimistic adds in flight
+          setEvents((prev) => {
+            const serverIds = new Set(validEvents.map(e => e.id));
+            const localOnly = prev.filter(e => !serverIds.has(e.id));
+            return [...validEvents, ...localOnly];
+          });
+
+          // Seed any local-only events that the server doesn't have yet
+          // (handles partial-sync / first-device-with-existing-data scenarios)
+          const serverIdSet = new Set(validEvents.map(e => e.id));
+          const currentLocal = localEventsRef.current || [];
+          const unseeded = currentLocal.filter(e => !serverIdSet.has(e.id));
+          if (unseeded.length > 0 && !abortController.signal.aborted) {
+            logger.log(`[Sync] Seeding ${unseeded.length} local-only events to server.`);
+            try {
+              const encUnseeded = await Promise.all(
+                unseeded.map((e) => encryptEvent(e, cryptoKey)),
+              );
+              const seedRes = await emitAsync(
+                SOCKET_EVENTS.EVENT_BULK_SAVE,
+                { roomId, events: encUnseeded },
+                newSocket,
+              );
+              if (seedRes && Array.isArray(seedRes.versions)) {
+                for (const v of seedRes.versions) {
+                  if (v.id && typeof v.version === 'number') {
+                    versionMapRef.current.set(v.id, v.version);
+                  }
+                }
+              }
+              for (const event of unseeded) {
+                baseEventsRef.current.set(event.id, { ...event });
+              }
+            } catch (seedErr) {
+              logger.error("[Sync] Failed to seed local-only events:", seedErr);
+            }
+          }
         } else {
-          // Re-seed logic: Only re-upload local events on the FIRST connection
-          // to avoid resurrecting events that were deleted from another client.
+          // Server has 0 events — seed local data if this is a fresh connection.
+          // isInitialLoadDone is reset at the top of each effect cycle, so this
+          // correctly distinguishes "first fetch" from "socket.io internal reconnect".
           if (!isInitialLoadDone.current) {
             const currentLocal = localEventsRef.current;
             if (currentLocal && currentLocal.length > 0) {
-              logger.log(`[Sync] First connection with empty server — re-seeding ${currentLocal.length} events.`);
+              logger.log(`[Sync] First connection with empty server — seeding ${currentLocal.length} events.`);
               const encryptedEvents = await Promise.all(
                 currentLocal.map((e) => encryptEvent(e, cryptoKey)),
               );
-              await emitAsync(
+              if (abortController.signal.aborted) return;
+              const seedResponse = await emitAsync(
                 SOCKET_EVENTS.EVENT_BULK_SAVE,
                 { roomId, events: encryptedEvents },
                 newSocket,
               );
+              // Track versions from the server so OCC works for subsequent edits
+              if (seedResponse && Array.isArray(seedResponse.versions)) {
+                for (const v of seedResponse.versions) {
+                  if (v.id && typeof v.version === 'number') {
+                    versionMapRef.current.set(v.id, v.version);
+                  }
+                }
+              }
+              for (const event of currentLocal) {
+                baseEventsRef.current.set(event.id, { ...event });
+              }
+            } else {
+              logger.log("[Sync] First connection — both server and local are empty.");
             }
           } else {
-            // On reconnect, server is empty — respect that (other client may have cleared)
-            logger.log("[Sync] Server has 0 events on reconnect. Clearing local state.");
-            setEvents([]);
+            // isInitialLoadDone was set within THIS cycle, meaning fetchInitialData
+            // somehow ran twice (should not happen). Log and leave state untouched.
+            logger.warn("[Sync] Server returned 0 events on repeat fetch — leaving local state intact.");
           }
         }
 
@@ -423,7 +535,7 @@ export const useSocketSync = (
     };
   }, [roomId, isAuthorized, authToken, cryptoKey]); // Re-run if auth changes
 
-  // --- CRUD Actions ---
+  // --- CRUD Actions (with Optimistic Concurrency Control) ---
 
   const addEvent = useCallback(async (event) => {
       const normalized = normalizeEvent(event);
@@ -433,16 +545,24 @@ export const useSocketSync = (
         notifyRef.current.error("Task is missing required fields.");
         return;
       }
+      // Optimistic update
       setEvents((prev) => [...prev, normalized]);
+      // Store as base event for future merges
+      baseEventsRef.current.set(normalized.id, { ...normalized });
       if (!socket || !cryptoKey) return;
       try {
         const encrypted = await encryptEvent(normalized, cryptoKey);
-        // CRITICAL: Ensure we send 'roomId' as expected by server
-        await emitAsync(SOCKET_EVENTS.EVENT_SAVE, { roomId, event: encrypted });
+        // New events don't need version (no existing server state to conflict with)
+        const response = await emitAsync(SOCKET_EVENTS.EVENT_SAVE, { roomId, event: encrypted });
+        // Track the version assigned by the server
+        if (response && typeof response.version === 'number') {
+          versionMapRef.current.set(normalized.id, response.version);
+        }
       } catch (err) {
         logger.error("Sync failed:", err);
-        notifyRef.current.error("Sync failed. Your change was rolled back.");
-        setEvents((prev) => prev.filter((e) => e.id !== normalized.id));
+        // Keep the optimistic update — don't roll back new events on sync failure.
+        // The event stays visible locally and will be re-synced on next connection.
+        notifyRef.current.warning("Sync pending. Your task is saved locally.");
       }
     }, [socket, cryptoKey, roomId, setEvents]);
 
@@ -458,18 +578,40 @@ export const useSocketSync = (
         return;
       }
       setEvents((prev) => [...prev, ...validEvents]);
+      // Store base events
+      for (const event of validEvents) {
+        baseEventsRef.current.set(event.id, { ...event });
+      }
       if (!socket || !cryptoKey || validEvents.length === 0) return;
       try {
         const encryptedEvents = await Promise.all(
           validEvents.map((e) => encryptEvent(e, cryptoKey)),
         );
-        await emitAsync(SOCKET_EVENTS.EVENT_BULK_SAVE, { roomId, events: encryptedEvents });
+        const response = await emitAsync(SOCKET_EVENTS.EVENT_BULK_SAVE, { roomId, events: encryptedEvents });
+        // Track versions from bulk save response
+        if (response && Array.isArray(response.versions)) {
+          for (const v of response.versions) {
+            if (v.id && typeof v.version === 'number') {
+              versionMapRef.current.set(v.id, v.version);
+            }
+          }
+        }
       } catch (err) {
         logger.error("Bulk sync failed:", err);
         notifyRef.current.error("Bulk sync failed. Some items may be unsynced.");
       }
     }, [socket, cryptoKey, roomId, setEvents]);
 
+  /**
+   * Updates an event with Optimistic Concurrency Control.
+   * 
+   * Flow:
+   * 1. Apply optimistic update locally
+   * 2. Send update with current version to server
+   * 3. If server confirms → update version tracker
+   * 4. If conflict → attempt field-level merge using base event as common ancestor
+   * 5. If merge fails (same fields changed) → last-write-wins force save
+   */
   const updateEvent = useCallback(async (event) => {
       const normalized = normalizeEvent(event);
       if (!normalized) return;
@@ -478,6 +620,7 @@ export const useSocketSync = (
         notifyRef.current.error("Task is missing required fields.");
         return;
       }
+      // Capture previous state for rollback
       let previousEvent = null;
       setEvents((prev) => {
         previousEvent = prev.find((e) => e.id === normalized.id);
@@ -486,7 +629,108 @@ export const useSocketSync = (
       if (!socket || !cryptoKey) return;
       try {
         const encrypted = await encryptEvent(normalized, cryptoKey);
-        await emitAsync(SOCKET_EVENTS.EVENT_SAVE, { roomId, event: encrypted });
+        const currentVersion = versionMapRef.current.get(normalized.id);
+        const response = await emitAsync(SOCKET_EVENTS.EVENT_SAVE, {
+          roomId,
+          event: encrypted,
+          version: currentVersion, // Send version for OCC check
+        });
+
+        if (response && response.conflict) {
+          // --- Conflict detected! Attempt field-level merge ---
+          logger.warn("[Sync] Conflict detected for event:", normalized.id,
+            "local version:", currentVersion, "server version:", response.serverVersion);
+
+          try {
+            // Decrypt the server's current version
+            const serverDecrypted = await decryptEvent(response.serverEvent, cryptoKey);
+            const serverNormalized = normalizeEvent(serverDecrypted);
+
+            // Get the base (common ancestor) for three-way merge
+            const baseEvent = baseEventsRef.current.get(normalized.id) || null;
+
+            // Attempt field-level merge
+            const mergeResult = fieldLevelMerge(baseEvent, normalized, serverNormalized);
+
+            if (mergeResult.merged) {
+              // Merge succeeded! Re-encrypt and save the merged version
+              logger.log("[Sync] Field-level merge succeeded for event:", normalized.id);
+              const mergedEncrypted = await encryptEvent(mergeResult.merged, cryptoKey);
+              const retryResponse = await emitAsync(SOCKET_EVENTS.EVENT_SAVE, {
+                roomId,
+                event: mergedEncrypted,
+                version: response.serverVersion, // Use the server's current version
+              });
+
+              if (retryResponse && retryResponse.conflict) {
+                // Another conflict during merge retry — force LWW
+                logger.warn("[Sync] Conflict during merge retry — falling back to last-write-wins");
+                const lwwEvent = lastWriteWins(mergeResult.merged, serverNormalized);
+                const lwwEncrypted = await encryptEvent(lwwEvent, cryptoKey);
+                const forceResponse = await emitAsync(SOCKET_EVENTS.EVENT_SAVE, {
+                  roomId,
+                  event: lwwEncrypted,
+                  force: true,
+                });
+                // Update local state and version
+                setEvents((prev) => prev.map((e) => (e.id === lwwEvent.id ? lwwEvent : e)));
+                baseEventsRef.current.set(lwwEvent.id, { ...lwwEvent });
+                if (forceResponse && typeof forceResponse.version === 'number') {
+                  versionMapRef.current.set(lwwEvent.id, forceResponse.version);
+                }
+              } else {
+                // Merge retry succeeded
+                setEvents((prev) => prev.map((e) => (e.id === mergeResult.merged.id ? mergeResult.merged : e)));
+                baseEventsRef.current.set(mergeResult.merged.id, { ...mergeResult.merged });
+                if (retryResponse && typeof retryResponse.version === 'number') {
+                  versionMapRef.current.set(mergeResult.merged.id, retryResponse.version);
+                }
+              }
+            } else {
+              // Merge failed (conflicting fields) — use last-write-wins
+              logger.warn("[Sync] Field merge failed (conflicts:", mergeResult.conflicts, ") — using last-write-wins");
+              const lwwEvent = lastWriteWins(normalized, serverNormalized);
+              const lwwEncrypted = await encryptEvent(lwwEvent, cryptoKey);
+              const forceResponse = await emitAsync(SOCKET_EVENTS.EVENT_SAVE, {
+                roomId,
+                event: lwwEncrypted,
+                force: true, // Skip version check — force save
+              });
+              // Update state with our version
+              setEvents((prev) => prev.map((e) => (e.id === lwwEvent.id ? lwwEvent : e)));
+              baseEventsRef.current.set(lwwEvent.id, { ...lwwEvent });
+              if (forceResponse && typeof forceResponse.version === 'number') {
+                versionMapRef.current.set(lwwEvent.id, forceResponse.version);
+              }
+              notifyRef.current.warning("A sync conflict was resolved automatically.");
+            }
+          } catch (mergeErr) {
+            // Merge process itself failed — force save local version as fallback
+            logger.error("[Sync] Merge process failed:", mergeErr);
+            try {
+              const forceEncrypted = await encryptEvent(normalized, cryptoKey);
+              const forceResponse = await emitAsync(SOCKET_EVENTS.EVENT_SAVE, {
+                roomId,
+                event: forceEncrypted,
+                force: true,
+              });
+              if (forceResponse && typeof forceResponse.version === 'number') {
+                versionMapRef.current.set(normalized.id, forceResponse.version);
+              }
+              baseEventsRef.current.set(normalized.id, { ...normalized });
+            } catch (forceErr) {
+              logger.error("[Sync] Force save also failed:", forceErr);
+              notifyRef.current.error("Update failed. Your change was rolled back.");
+              if (previousEvent) {
+                setEvents((prev) => prev.map((e) => (e.id === normalized.id ? previousEvent : e)));
+              }
+            }
+          }
+        } else if (response && typeof response.version === 'number') {
+          // Success — update version tracker and base event
+          versionMapRef.current.set(normalized.id, response.version);
+          baseEventsRef.current.set(normalized.id, { ...normalized });
+        }
       } catch (err) {
         logger.error("Update failed:", err);
         notifyRef.current.error("Update failed. Your change was rolled back.");
@@ -502,6 +746,9 @@ export const useSocketSync = (
         deletedEvent = prev.find((e) => e.id === eventId);
         return prev.filter((e) => e.id !== eventId);
       });
+      // Clean up version and base tracking
+      versionMapRef.current.delete(eventId);
+      baseEventsRef.current.delete(eventId);
       if (!socket) return;
       try {
         await emitAsync(SOCKET_EVENTS.EVENT_DELETE, { roomId, eventId });
@@ -538,6 +785,11 @@ export const useSocketSync = (
 
     // Optimistic update
     setEvents((prev) => prev.filter(e => !targets.includes(e.id)));
+    // Clean up version and base tracking for deleted events
+    for (const id of targets) {
+      versionMapRef.current.delete(id);
+      baseEventsRef.current.delete(id);
+    }
     
     if (!socket) return;
     try {

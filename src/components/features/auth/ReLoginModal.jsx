@@ -27,13 +27,14 @@ const ReLoginModal = ({ isOpen, onClose, onOffline }) => {
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+          <label htmlFor="room-password" className="block text-xs font-bold text-slate-500 uppercase mb-1">
             Room Password
           </label>
           <div className="relative">
             <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
             <input
               type="password"
+              id="room-password"
               autoFocus
               value={password}
               onChange={(e) => setPassword(e.target.value)}

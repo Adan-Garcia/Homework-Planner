@@ -2,29 +2,30 @@
 
 Thank you for considering contributing to the Homework Planner! This document provides guidelines and information for contributors.
 
-## 🎯 Project Vision
+## Project Vision
 
-Homework Planner is designed to be a **privacy-first, zero-knowledge** task management application. When contributing, please keep these core principles in mind:
+Homework Planner is a **privacy-first, zero-knowledge** task management application. When contributing, keep these core principles in mind:
 
-1. **Privacy First**: Never compromise on zero-knowledge architecture
-2. **Security**: All data must be encrypted client-side
-3. **Simplicity**: Keep the UI intuitive and focused
-4. **Performance**: Maintain fast, responsive user experience
-5. **Accessibility**: Ensure all users can access features
+1. **Privacy First** — Never compromise on zero-knowledge architecture
+2. **Security** — All data must be encrypted client-side before transmission
+3. **Simplicity** — Keep the UI intuitive and focused
+4. **Performance** — Maintain fast, responsive user experience
+5. **Offline-First** — Features must work without network connectivity
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
+
 - Node.js 18+ and npm
-- Basic understanding of React and Web Crypto API
-- Familiarity with Socket.io for real-time features
+- Basic understanding of React 19, Web Crypto API, and Socket.io
+- SQLite knowledge for backend work
 
 ### Setup Development Environment
 
 ```bash
 # Clone the repository
 git clone https://github.com/adan-garcia/planner.git
-cd planner
+cd planner/Homework-Planner
 
 # Install dependencies
 npm install
@@ -39,103 +40,143 @@ npm test
 npm run lint
 ```
 
-## 📋 Code Style Guidelines
+For backend development:
+
+```bash
+cd ../Backend
+npm install
+npm run dev    # Uses nodemon for auto-restart
+```
+
+## Code Style Guidelines
 
 ### General Principles
-- **Use functional components** with hooks (no class components except ErrorBoundary)
-- **Prefer composition** over inheritance
-- **Keep components small** (under 300 lines)
-- **Use PropTypes** for all component props
-- **Add JSDoc comments** to all exported functions
+
+- **Functional components** with hooks (no class components except ErrorBoundary)
+- **Composition over inheritance**
+- **Small components** — aim for under 300 lines
+- **JSDoc comments** on exported functions
+- **Memoize** context values and expensive computations
 
 ### File Organization
+
 ```
 src/
-├── components/     # UI components
-│   ├── ui/        # Reusable UI primitives
-│   ├── features/  # Feature-specific components
-│   ├── layout/    # Layout wrappers
-│   └── modals/    # Modal dialogs
-├── context/       # React Context providers
-├── hooks/         # Custom React hooks
-├── utils/         # Pure utility functions
-├── test/          # Test files
-└── workers/       # Web Workers
+├── components/
+│   ├── ui/           # Reusable design primitives (Button, Card, Modal, Input)
+│   ├── features/     # Feature-specific components (auth, calendar, settings, etc.)
+│   ├── layout/       # Layout wrappers (MainLayout)
+│   ├── managers/     # Orchestrators (ModalManager)
+│   └── modals/       # Dialog components (TaskModal, SettingsModal, ConfirmationModal)
+├── context/          # React Context providers (Auth, Data, DragDrop, Notification, Planner)
+├── hooks/            # Custom React hooks (useSocketSync, useRoomAuth, etc.)
+├── utils/            # Pure utility functions (crypto, helpers, mergeUtils, constants)
+├── test/             # Test files (unit + integration)
+├── types/            # TypeScript type definitions
+└── workers/          # Web Workers (ICS parsing)
 ```
 
 ### Naming Conventions
-- **Components**: PascalCase (e.g., `TaskModal.jsx`)
-- **Hooks**: camelCase with 'use' prefix (e.g., `useSocketSync.js`)
-- **Utilities**: camelCase (e.g., `helpers.js`)
-- **Constants**: UPPER_SNAKE_CASE (e.g., `MAX_TASK_TITLE_LENGTH`)
-- **Context**: PascalCase with 'Context' suffix (e.g., `DataContext.jsx`)
+
+| Type | Convention | Example |
+|------|-----------|---------|
+| Components | PascalCase | `TaskModal.jsx` |
+| Hooks | camelCase with `use` prefix | `useSocketSync.js` |
+| Utilities | camelCase | `helpers.js` |
+| Constants | UPPER_SNAKE_CASE | `MAX_TASK_TITLE_LENGTH` |
+| Context | PascalCase with `Context` suffix | `DataContext.jsx` |
 
 ### React Patterns
 
-#### Context Usage
-```javascript
-// ✅ Good: Memoize context value
-const value = useMemo(() => ({
-  data,
-  updateData,
-}), [data, updateData]);
+#### Context Values — Always Memoize
 
-// ❌ Bad: New object on every render
-const value = { data, updateData };
+```javascript
+// Good
+const value = useMemo(() => ({
+  events,
+  addEvent,
+  deleteEvent,
+}), [events, addEvent, deleteEvent]);
+
+// Bad — new object every render, causes all consumers to re-render
+const value = { events, addEvent, deleteEvent };
 ```
 
-#### State Updates
+#### State Updates — Use Functional Form
+
 ```javascript
-// ✅ Good: Functional updates for derived state
+// Good
 setEvents(prev => prev.map(e => e.id === id ? updated : e));
 
-// ❌ Bad: Direct state reference
+// Bad — stale closure risk
 setEvents(events.map(e => e.id === id ? updated : e));
 ```
 
-#### Effect Cleanup
+#### Effects — Always Clean Up
+
 ```javascript
-// ✅ Good: Always cleanup side effects
 useEffect(() => {
   const controller = new AbortController();
-  
   fetchData(controller.signal);
-  
   return () => controller.abort();
 }, []);
 ```
 
-## 🔐 Security Guidelines
+#### Callbacks — Stabilize with useCallback
+
+```javascript
+// Good — stable reference for child components
+const handleSave = useCallback((event) => {
+  setEvents(prev => [...prev, event]);
+}, []);
+```
+
+## Security Guidelines
 
 ### Encryption Rules
-1. **Never** store passwords in localStorage
-2. **Always** validate input before encryption
-3. **Generate unique IVs** for each encryption operation
-4. **Use constant-time operations** where possible
+
+1. **Never** store passwords or crypto keys in localStorage
+2. **Always** generate a unique IV for each encryption operation
+3. **Never** send the DATA key to the server — only the AUTH key (hashed)
+4. **Validate** all input before encryption and before database insertion
+5. **Use** `crypto.timingSafeEqual` for any hash comparison on the server
 
 ### Input Validation
+
 ```javascript
-// ✅ Good: Validate and sanitize
+// Good — validate and constrain
 const title = sanitizeInput(input.title);
 if (title.length > MAX_TASK_TITLE_LENGTH) {
   throw new Error('Title too long');
 }
 
-// ❌ Bad: Trust user input
+// Bad — trust user input
 const title = input.title;
 ```
 
-## 🧪 Testing Guidelines
+### Server-Side Rules
 
-### Test Coverage Requirements
-- **Utilities**: 90%+ coverage
-- **Crypto functions**: 100% coverage
-- **Components**: Focus on user interactions
-- **Hooks**: Test state transitions
+- All SQL uses **prepared statements** (never concatenate user input into queries)
+- Room IDs validated with regex: `/^[a-zA-Z0-9_-]+$/`
+- Event data length capped at 100KB
+- Bulk operations limited to 1000 items
+
+## Testing Guidelines
+
+### Test Coverage Targets
+
+| Module | Target | Critical Paths |
+|--------|--------|----------------|
+| Crypto | 100% | All encrypt/decrypt/derive functions |
+| Helpers | 90%+ | Validation, sanitization, normalization |
+| MergeUtils | 100% | Field-level 3-way merge logic |
+| Hooks | 80%+ | Auth flow, sync lifecycle, conflict resolution |
+| Components | 70%+ | User interactions, form submissions |
 
 ### Writing Tests
+
 ```javascript
-// ✅ Good: Test behavior, not implementation
+// Good — test behavior, not implementation
 it('should add event when form is submitted', () => {
   const { getByText, getByLabelText } = render(<TaskModal />);
   fireEvent.change(getByLabelText('Title'), { target: { value: 'Test' } });
@@ -145,79 +186,72 @@ it('should add event when form is submitted', () => {
   }));
 });
 
-// ❌ Bad: Testing internal state
+// Bad — testing internal state
 it('should set formData.title', () => {
-  const { getByLabelText } = render(<TaskModal />);
-  fireEvent.change(getByLabelText('Title'), { target: { value: 'Test' } });
-  expect(component.state.formData.title).toBe('Test');
+  // Don't reach into component internals
 });
 ```
 
-## 📝 Documentation
+### Running Tests
+
+```bash
+npm test              # Run all tests
+npm test -- --watch   # Watch mode
+npm test -- --coverage # Coverage report
+```
+
+## Documentation
 
 ### JSDoc Format
+
 ```javascript
 /**
  * Brief one-line description.
- * 
- * Detailed explanation of what the function does,
- * any important behaviors, or edge cases.
- * 
- * @param {Type} paramName - Parameter description
- * @returns {Type} Return value description
- * 
- * @example
- * const result = functionName(arg);
- * // Returns: expected output
+ *
+ * @param {string} roomId - The room identifier
+ * @param {CryptoKey} key - AES-GCM encryption key
+ * @returns {Promise<Object>} Decrypted event object
  */
 ```
 
-### Component Documentation
-Include at the top of each component:
-- Purpose of the component
-- Key features or behaviors
-- Props description (via PropTypes)
-- Usage examples if complex
-
-## 🐛 Bug Reports
+## Bug Reports
 
 ### Before Submitting
-1. Check if the issue already exists
-2. Test in latest version
-3. Reproduce in clean environment
 
-### Bug Report Template
+1. Check if the issue already exists
+2. Test in the latest version
+3. Reproduce in a clean environment
+
+### Template
+
 ```markdown
 **Description**
 Clear description of the bug.
 
 **To Reproduce**
 1. Go to '...'
-2. Click on '....'
+2. Click on '...'
 3. See error
 
 **Expected Behavior**
 What should happen.
 
-**Screenshots**
-If applicable.
-
 **Environment**
 - Browser: [e.g., Chrome 120]
 - OS: [e.g., Windows 11]
-- Version: [e.g., 1.0.0]
 ```
 
-## 🎨 Pull Request Process
+## Pull Request Process
 
 ### Before Submitting
-1. **Run tests**: `npm test`
-2. **Check linting**: `npm run lint`
-3. **Update docs** if needed
-4. **Add tests** for new features
-5. **Update CHANGELOG.md**
+
+1. `npm test` — all tests pass
+2. `npm run lint` — no lint errors
+3. Update documentation if needed
+4. Add tests for new features
 
 ### PR Template
+
 ```markdown
 ## Description
 What does this PR do?
@@ -235,56 +269,30 @@ How was this tested?
 - [ ] Tests pass
 - [ ] Linting passes
 - [ ] Documentation updated
-- [ ] CHANGELOG.md updated
 ```
 
-### Review Process
-1. Automated tests must pass
-2. At least one maintainer approval required
-3. All review comments addressed
-4. No merge conflicts
-
-## 🏷️ Commit Message Format
+## Commit Message Format
 
 Follow conventional commits:
 
 ```
 <type>(<scope>): <subject>
-
-<body>
-
-<footer>
 ```
 
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation only
-- `style`: Code style (formatting, no logic change)
-- `refactor`: Code refactoring
-- `test`: Adding tests
-- `chore`: Maintenance tasks
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
 **Examples:**
+
 ```
-feat(sync): add reconnection backoff strategy
-
-Implements exponential backoff for socket reconnections
-to prevent thundering herd on server restart.
-
-Closes #123
+feat(sync): add field-level 3-way merge for conflict resolution
+fix(crypto): handle empty IV in decryption edge case
+docs(readme): update sync architecture section
 ```
 
-## ❓ Questions?
+## License
 
-- Check the [README.md](README.md) for basic usage
-- Review existing code for patterns
-- Open a discussion issue for architecture questions
-
-## 📄 License
-
-By contributing, you agree that your contributions will be licensed under the same license as the project.
+By contributing, you agree that your contributions will be licensed under the [AGPL-3.0](LICENSE) license.
 
 ---
 
-Thank you for making Homework Planner better! 🎉
+Thank you for making Homework Planner better!

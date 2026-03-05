@@ -1,7 +1,8 @@
 import React from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Plus } from "lucide-react";
 import ClassRow from "./ClassRow";
 import MergeContent from "./MergeContent";
+import { PALETTE } from "../../../utils/constants";
 
 /**
  * ClassManager Component
@@ -10,8 +11,9 @@ import MergeContent from "./MergeContent";
  * 1. View all discovered classes.
  * 2. Change class colors.
  * 3. Rename or Delete classes.
- * 4. "Scan Tasks": Finds classes in existing tasks that might not have a color entry.
- * 5. Merge: Combine two classes (e.g., "MATH 101" + "Math 101" -> "MATH 101").
+ * 4. Manually add new classes.
+ * 5. "Scan Tasks": Finds classes in existing tasks that might not have a color entry.
+ * 6. Merge: Combine two classes (e.g., "MATH 101" + "Math 101" -> "MATH 101").
  */
 const ClassManager = ({
   classColors,
@@ -39,12 +41,15 @@ const ClassManager = ({
       setAddError("Class already exists");
       return;
     }
-    // Basic validation: allow only letters, numbers, spaces, dashes, underscores
+    // Basic validation: allow letters, numbers, spaces, dashes, underscores (2-64 chars)
     if (!/^[\w\s\-]{2,64}$/.test(name)) {
-      setAddError("Invalid class name");
+      setAddError("Use 2-64 characters (letters, numbers, spaces, dashes)");
       return;
     }
-    setClassColors({ ...classColors, [name]: "#8888ff" });
+    // Pick the next color from the palette based on how many classes exist
+    const colorIndex = classOptions.length;
+    const newColor = PALETTE[colorIndex % PALETTE.length];
+    setClassColors({ ...classColors, [name]: newColor });
     setNewClassName("");
     setAddError("");
   };
@@ -63,7 +68,7 @@ const ClassManager = ({
           <h4 className="text-heading">Classes & Colors</h4>
           <button
             onClick={handleScan}
-            className="text-[10px] flex items-center gap-1 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-md transition-colors"
+            className="text-[10px] flex items-center gap-1 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 px-2 py-1 rounded-md transition-colors"
             title="Scan existing tasks for classes missing colors"
           >
             <RefreshCw className="w-3 h-3" />
@@ -75,21 +80,24 @@ const ClassManager = ({
         <div className="flex items-center gap-2 mb-3 px-1">
           <input
             type="text"
-            className="flex-1 p-1 text-xs rounded border-input surface-input text-input"
-            placeholder="Add new class..."
+            className="flex-1 px-3 py-2 text-xs rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 text-primary placeholder:text-secondary/50 outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            placeholder="New class name..."
             value={newClassName}
             onChange={e => { setNewClassName(e.target.value); setAddError(""); }}
             onKeyDown={e => { if (e.key === "Enter") handleAddClass(); }}
             maxLength={64}
+            aria-label="New class name"
           />
           <button
             onClick={handleAddClass}
-            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-1 px-3 py-2 text-xs rounded-xl bg-[#007AFF] text-white hover:bg-[#0066DD] shadow-sm shadow-blue-500/20 transition-all hover:scale-105 active:scale-95 font-medium"
+            aria-label="Add new class"
           >
+            <Plus className="w-3 h-3" />
             Add
           </button>
         </div>
-        {addError && <div className="text-xs text-red-500 px-1 mb-2">{addError}</div>}
+        {addError && <div className="text-[11px] text-red-500 px-1 mb-2 font-medium">{addError}</div>}
 
         {/* Scrollable list of class rows */}
         <div className="space-y-2 overflow-y-auto custom-scrollbar pr-1 flex-1">

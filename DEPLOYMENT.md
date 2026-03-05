@@ -1,16 +1,11 @@
 # Deployment Guide
 
-## 🚀 Production Deployment Checklist
+## Production Deployment
 
-### **1. Frontend Deployment (Cloudflare Pages / Vercel / Netlify)**
+### 1. Frontend (Cloudflare Pages)
 
-#### **Environment Variables**
-```bash
-# Optional: Override API URL (defaults to https://api.adangarcia.com/backend)
-VITE_API_BASE_URL=https://api.adangarcia.com/backend
-```
+#### Build Configuration
 
-#### **Build Configuration**
 ```bash
 # Build command
 npm run build
@@ -19,78 +14,124 @@ npm run build
 dist
 ```
 
----
+#### Environment Variables
 
-### **2. Backend CORS Configuration** ⚠️
-
-**Current Issue**: CORS errors when frontend at `https://homework.adangarcia.com` calls API at `https://api.adangarcia.com`
-
-#### **Required Backend Changes**
-
-Add these headers to your backend API responses:
-
-```javascript
-// Express.js example
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://homework.adangarcia.com');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
+```bash
+# Optional: override default API URL
+VITE_API_BASE_URL=https://api.adangarcia.com/backend
 ```
 
-#### **Nginx Configuration** (if using nginx as reverse proxy)
+The API URL can also be configured at runtime via the app's **Settings > API Configuration** panel.
+
+---
+
+### 2. Backend (Docker)
+
+The backend runs as a Docker container using the `node:20-alpine` base image.
+
+#### Docker Compose (Production)
+
+```yaml
+services:
+  planner-backend:
+    image: ghcr.io/adan-garcia/planner-backend:latest
+    ports:
+      - "443:3001"
+      - "81:3001"
+    restart: always
+    volumes:
+      - /planner/backend:/app/data          # Persistent SQLite DB
+      - /path/to/ssl/key.pem:/app/ssl/key.pem:ro
+      - /path/to/ssl/cert.pem:/app/ssl/cert.pem:ro
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      USE_HTTPS: "true"
+      SSL_KEY_PATH: /app/ssl/key.pem
+      SSL_CERT_PATH: /app/ssl/cert.pem
+      DB_PATH: /app/data/planner.db
+      SESSION_TTL_MS: "86400000"            # 24 hours
+      MAX_META_SIZE: "2048"
+      ORIGINS: "https://planner.adangarcia.com,https://homework.adangarcia.com,https://api.adangarcia.com"
+```
+
+#### Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3001` | Server listen port |
+| `USE_HTTPS` | `false` | Enable HTTPS with SSL certs |
+| `SSL_KEY_PATH` | — | Path to SSL private key |
+| `SSL_CERT_PATH` | — | Path to SSL certificate |
+| `DB_PATH` | `./planner.db` | SQLite database file path |
+| `ORIGINS` | See server.js | Comma-separated allowed CORS origins |
+| `SESSION_TTL_MS` | `86400000` (24h) | Session token lifetime in ms |
+| `MAX_META_SIZE` | `2048` | Max meta JSON size in bytes |
+| `SOCKET_MAX_CONN_PER_WINDOW` | `30` | Max socket connections per 60s per IP |
+| `SOCKET_MAX_SOCKETS_PER_IP` | `20` | Max concurrent sockets per IP |
+| `SOCKET_MAX_EVENTS_PER_WINDOW` | `80` | Max socket events per 10s per socket |
+
+#### Building the Docker Image
+
+```bash
+cd Backend
+docker build -t planner-backend .
+docker run -d -p 3001:3001 \
+  -v $(pwd)/data:/app/data \
+  -e NODE_ENV=production \
+  planner-backend
+```
+
+---
+
+### 3. CORS Configuration
+
+The backend supports multiple origins via the `ORIGINS` environment variable. The current defaults are:
+
+```
+https://planner.adangarcia.com
+http://localhost:3000
+http://127.0.0.1:3000
+https://api.adangarcia.com
+https://homework.adangarcia.com
+```
+
+CORS is enforced on both HTTP routes (via `cors()` middleware) and Socket.io connections.
+
+#### Nginx Reverse Proxy (if applicable)
+
 ```nginx
 location /backend {
-    # CORS headers
-    add_header 'Access-Control-Allow-Origin' 'https://homework.adangarcia.com' always;
-    add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-    add_header 'Access-Control-Allow-Headers' 'Content-Type, Authorization' always;
-    add_header 'Access-Control-Allow-Credentials' 'true' always;
-    
-    # Handle preflight
-    if ($request_method = 'OPTIONS') {
-        return 204;
-    }
-    
-    proxy_pass http://your-backend:3000;
+    proxy_pass http://localhost:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
 
+Note: The backend reads `cf-connecting-ip`, `x-forwarded-for`, and `trust proxy` for accurate client IP detection behind proxies.
+
 ---
 
-### **3. Content Security Policy (CSP)** 🔒
+### 4. Security Headers
 
-#### **Meta Tag CSP** (Current - index.html)
-```html
-<meta http-equiv="Content-Security-Policy" 
-  content="default-src 'self'; 
-           script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; 
-           style-src 'self' 'unsafe-inline'; 
-           img-src 'self' data: https:; 
-           connect-src 'self' https://api.adangarcia.com https://*.adangarcia.com wss://api.adangarcia.com ws://localhost:* http://localhost:*; 
-           font-src 'self' data:; 
-           worker-src 'self' blob:; 
-           manifest-src 'self'; 
-           object-src 'none'; 
-           base-uri 'self'; 
-           form-action 'self';" 
-/>
-```
+#### Backend (Helmet.js)
 
-#### **HTTP Header CSP** (Recommended - Cloudflare/Server)
+The server sets strict security headers via Helmet:
 
-**⚠️ Note**: `frame-ancestors` directive **ONLY** works via HTTP headers, not meta tags.
+- **Content-Security-Policy:** `default-src 'self'` with restrictive directives
+- **Cross-Origin-Resource-Policy:** `same-origin`
+- **Cross-Origin-Embedder-Policy:** `require-corp`
+- **Cross-Origin-Opener-Policy:** `same-origin`
+- **Permissions-Policy:** Restrictive (no camera, microphone, geolocation, etc.)
+- Plus all Helmet defaults (X-Content-Type-Options, X-Frame-Options, etc.)
 
-Set this in your hosting platform (Cloudflare Pages, Vercel, Netlify):
+#### Frontend (Cloudflare Pages `_headers`)
 
-**Cloudflare Pages** (`_headers` file):
 ```
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.adangarcia.com https://*.adangarcia.com wss://api.adangarcia.com; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests;
@@ -100,235 +141,115 @@ Set this in your hosting platform (Cloudflare Pages, Vercel, Netlify):
   Permissions-Policy: geolocation=(), microphone=(), camera=()
 ```
 
-**Vercel** (`vercel.json`):
-```json
-{
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.adangarcia.com https://*.adangarcia.com wss://api.adangarcia.com; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests;"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        }
-      ]
-    }
-  ]
-}
-```
-
-**Netlify** (`netlify.toml`):
-```toml
-[[headers]]
-  for = "/*"
-  [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://api.adangarcia.com wss://api.adangarcia.com; worker-src 'self' blob:; frame-ancestors 'none';"
-    X-Frame-Options = "DENY"
-```
+> **Note:** `frame-ancestors` only works via HTTP headers, not `<meta>` tags.
 
 ---
 
-### **4. CSP Warnings Explained**
+### 5. SSL / HTTPS
 
-#### **Warning**: `frame-ancestors` ignored in meta element
-**Cause**: This directive only works via HTTP headers  
-**Solution**: Add via server/hosting platform headers (see section 3 above)
+The backend supports native HTTPS via `USE_HTTPS=true` with `SSL_KEY_PATH` and `SSL_CERT_PATH`. If certificate loading fails, it automatically falls back to HTTP.
 
-#### **Error**: Cloudflare Insights script blocked
-**Cause**: `script-src 'self'` blocks external scripts  
-**Solution**: Already fixed - added `https://static.cloudflareinsights.com` to CSP
+For production, SSL is typically handled at the Docker container level or via a reverse proxy (Nginx, Cloudflare, etc.).
 
 ---
 
-### **5. Strict CSP (Optional - Maximum Security)**
+### 6. Database Maintenance
 
-For maximum security in production, replace `'unsafe-inline'` and `'unsafe-eval'` with nonces/hashes:
+The server runs automatic maintenance every ~66 minutes:
 
-```bash
-# Build with CSP nonces
-npm run build
+1. **WAL Checkpoint** — merges write-ahead log into main database file
+2. **Room Cleanup** — deletes rooms inactive for >48 hours (cascade deletes events + sessions)
+3. **Session Purge** — removes expired sessions (>24h by default)
 
-# Generate hash of inline scripts
-# Then update CSP with actual hashes
-```
+No manual database maintenance is required.
 
-**Build tool configuration** (vite.config.js):
-```javascript
-export default defineConfig({
-  build: {
-    // Generate integrity hashes
-    rollupOptions: {
-      output: {
-        // Enable integrity checks
-      }
-    }
-  }
-});
-```
+#### Database Migrations
+
+The server automatically handles schema migrations on startup:
+- Ensures composite primary key on `events` table (`room_id`, `id`)
+- Adds `version` column if missing (for OCC support)
 
 ---
 
-### **6. Testing Deployment**
+### 7. Testing Deployment
 
-#### **Check CSP**
+#### Check Health
+
 ```bash
-# Test CSP headers
-curl -I https://homework.adangarcia.com
-
-# Should see:
-# Content-Security-Policy: ...
+curl https://api.adangarcia.com/backend/api/health
+# {"status":"ok","timestamp":"..."}
 ```
 
-#### **Check CORS**
+#### Check CORS
+
 ```bash
-# Test CORS preflight
 curl -X OPTIONS https://api.adangarcia.com/backend/api/auth/init \
-  -H "Origin: https://homework.adangarcia.com" \
+  -H "Origin: https://planner.adangarcia.com" \
   -H "Access-Control-Request-Method: POST" \
   -v
-
-# Should see:
-# Access-Control-Allow-Origin: https://homework.adangarcia.com
+# Should see: Access-Control-Allow-Origin: https://planner.adangarcia.com
 ```
 
-#### **Test Authentication**
+#### Test Authentication
+
 1. Open browser DevTools → Network tab
-2. Try to create/join a room
-3. Check for:
-   - ✅ No CORS errors
-   - ✅ No CSP violations
-   - ✅ Successful API responses
+2. Create or join a room
+3. Verify:
+   - No CORS errors in console
+   - No CSP violations
+   - Successful `/api/auth/init` and `/api/auth/login` responses
+   - WebSocket connection established at `/backend/socket.io`
 
 ---
 
-### **7. Common Issues & Solutions**
+### 8. Performance
 
-#### **Issue**: CORS error `No 'Access-Control-Allow-Origin' header`
-**Solution**: Update backend to include CORS headers (see Section 2)
+#### Enable Compression (Nginx)
 
-#### **Issue**: CSP blocks Cloudflare Insights
-**Solution**: Add `https://static.cloudflareinsights.com` to `script-src` (already done)
-
-#### **Issue**: Service Worker not registering
-**Solution**: Ensure served over HTTPS and CSP allows `worker-src 'self' blob:`
-
-#### **Issue**: WebSocket connection fails
-**Solution**: Add `wss://api.adangarcia.com` to `connect-src` (already done)
-
----
-
-### **8. Performance Optimization**
-
-#### **Enable HTTP/2**
-Ensure your hosting supports HTTP/2 for better performance
-
-#### **Enable Compression**
 ```nginx
-# Nginx example
 gzip on;
-gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+gzip_types text/plain text/css application/json application/javascript text/xml;
 ```
 
-#### **Set Cache Headers**
+#### Cache Static Assets (Cloudflare Pages `_headers`)
+
 ```
-# Cloudflare Pages _headers
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
 /*.js
   Cache-Control: public, max-age=31536000, immutable
-  
+
 /*.css
   Cache-Control: public, max-age=31536000, immutable
 ```
 
----
+#### Monitoring
 
-### **9. Monitoring**
-
-#### **Error Tracking**
-Consider integrating error tracking:
-- Sentry
-- LogRocket
-- Rollbar
-
-#### **Web Vitals**
-Already integrated! Uncomment analytics code in `src/utils/webVitals.js`:
-
-```javascript
-// Google Analytics 4
-if (window.gtag) {
-  window.gtag('event', metric.name, {
-    value: Math.round(metric.value),
-    metric_id: metric.id,
-  });
-}
-```
+- Backend logs all requests with timestamps and origin info
+- Web Vitals tracking available in `src/utils/webVitals.js`
 
 ---
 
-### **10. Environment-Specific Settings**
+## Pre-Deployment Checklist
 
-#### **Development**
-- Loose CSP (allows localhost)
-- Debug logging enabled
-- Source maps enabled
-
-#### **Production**
-- Strict CSP via HTTP headers
-- No console.log (via logger.js)
-- Optimized builds
-- HTTPS only
-
----
-
-## 📋 Pre-Deployment Checklist
-
-- [ ] Backend CORS headers configured
+- [ ] Backend CORS origins configured (`ORIGINS` env var)
 - [ ] CSP headers set via hosting platform
-- [ ] Environment variables set
-- [ ] HTTPS certificate active
-- [ ] Service worker registering
-- [ ] Web Vitals monitoring configured
-- [ ] Error tracking integrated (optional)
-- [ ] API URL pointing to production backend
-- [ ] Test authentication flow
-- [ ] Test real-time sync
-- [ ] Test PWA offline functionality
+- [ ] Environment variables set for backend container
+- [ ] SSL certificates mounted (if using native HTTPS)
+- [ ] Database volume mounted for persistence
+- [ ] Health check passing (`/backend/api/health`)
+- [ ] Authentication flow working (init → login → socket connect)
+- [ ] Real-time sync tested across two devices
+- [ ] PWA offline functionality verified
+- [ ] Service worker registering correctly
 
 ---
 
-## 🆘 Quick Fixes
-
-### **Current Production Issues**
-
-1. **Fix CORS** (Backend):
-```javascript
-// Add to your Express server
-const cors = require('cors');
-app.use(cors({
-  origin: 'https://homework.adangarcia.com',
-  credentials: true
-}));
-```
-
-2. **Fix CSP frame-ancestors warning**:
-   - Remove from index.html meta tag
-   - Add via Cloudflare Page Rules or `_headers` file
-
-3. **Allow Cloudflare Insights**:
-   - ✅ Already fixed in updated index.html
-
----
-
-## 📚 Resources
+## Resources
 
 - [MDN CSP Guide](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
 - [CORS Explained](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 - [Cloudflare Pages Headers](https://developers.cloudflare.com/pages/platform/headers/)
-- [Vercel Headers](https://vercel.com/docs/edge-network/headers)
-- [Web Vitals](https://web.dev/vitals/)
+- [Docker Compose Docs](https://docs.docker.com/compose/)
+- [Socket.io Deployment](https://socket.io/docs/v4/using-multiple-nodes/)

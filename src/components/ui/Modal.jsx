@@ -30,6 +30,12 @@ const Modal = ({
 }) => {
   const modalRef = useRef(null);
   const previousFocusRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  
+  // Keep onClose ref current without re-triggering the effect
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   
   // Handle Escape key to close modal and manage focus trap
   useEffect(() => {
@@ -44,7 +50,7 @@ const Modal = ({
     }
     
     const handleEsc = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     
     const handleTab = (e) => {
@@ -79,7 +85,7 @@ const Modal = ({
         previousFocusRef.current.focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

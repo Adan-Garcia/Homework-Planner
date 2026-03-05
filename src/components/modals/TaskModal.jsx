@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
-import { Trash2, Save, RefreshCw, Layers } from "lucide-react";
+import { Trash2, Save, RefreshCw, Layers, Plus } from "lucide-react";
 import { useUI } from "../../context/PlannerContext";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -8,7 +8,7 @@ import Modal from "../ui/Modal";
 import Input from "../ui/Input";
 import Button from "../ui/Button";
 import { sanitizeInput } from "../../utils/helpers";
-import { MAX_TASK_TITLE_LENGTH, MAX_TASK_DESCRIPTION_LENGTH } from "../../utils/constants";
+import { MAX_TASK_TITLE_LENGTH, MAX_TASK_DESCRIPTION_LENGTH, PALETTE } from "../../utils/constants";
 
 /**
  * TaskModal Component
@@ -21,7 +21,7 @@ import { MAX_TASK_TITLE_LENGTH, MAX_TASK_DESCRIPTION_LENGTH } from "../../utils/
  */
 const TaskModal = ({ requestDelete }) => {
   const { modals, closeModal, editingTask } = useUI();
-  const { addEvent, updateEvent, deleteEvent, classColors } = useData();
+  const { addEvent, updateEvent, deleteEvent, classColors, setClassColors } = useData();
   const notify = useNotification();
 
   const classes = useMemo(() => Object.keys(classColors), [classColors]);
@@ -46,6 +46,11 @@ const TaskModal = ({ requestDelete }) => {
   
   // Scope selection for editing recurring events ("single" vs "series")
   const [editScope, setEditScope] = useState("single");
+
+  // State for inline new-class creation
+  const [isAddingClass, setIsAddingClass] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
+  const newClassInputRef = useRef(null);
 
   // --- Initialization ---
   // Use a ref to track initialization instead of state to avoid triggering re-renders
@@ -132,8 +137,41 @@ const TaskModal = ({ requestDelete }) => {
   }, []);
 
   const handleClassChange = useCallback((e) => {
+    if (e.target.value === "__new_class__") {
+      setIsAddingClass(true);
+      setNewClassName("");
+      // Focus the input after React renders it
+      setTimeout(() => newClassInputRef.current?.focus(), 50);
+      return;
+    }
     setFormData(prev => ({ ...prev, class: e.target.value }));
   }, []);
+
+  const handleAddNewClass = useCallback(() => {
+    const name = newClassName.trim();
+    if (!name || name.length < 2) {
+      notify.error("Class name must be at least 2 characters");
+      return;
+    }
+    if (classColors[name]) {
+      // Class already exists, just select it
+      setFormData(prev => ({ ...prev, class: name }));
+      setIsAddingClass(false);
+      setNewClassName("");
+      return;
+    }
+    if (!/^[\w\s\-]{2,64}$/.test(name)) {
+      notify.error("Use letters, numbers, spaces, or dashes (2-64 chars)");
+      return;
+    }
+    // Add new class with next palette color and sync via DataContext
+    const colorIndex = Object.keys(classColors).length;
+    const newColor = PALETTE[colorIndex % PALETTE.length];
+    setClassColors({ ...classColors, [name]: newColor });
+    setFormData(prev => ({ ...prev, class: name }));
+    setIsAddingClass(false);
+    setNewClassName("");
+  }, [newClassName, classColors, notify, setClassColors]);
 
   const handleTypeChange = useCallback((e) => {
     setFormData(prev => ({ ...prev, type: e.target.value }));
@@ -214,7 +252,7 @@ const TaskModal = ({ requestDelete }) => {
         time: isAllDay ? "" : formData.time 
     };
 
-    if (editingTask) {
+    if (editingTask?.id) {
       // Update existing
       // We pass `editScope` so DataContext knows whether to update siblings
       updateEvent({ 
@@ -307,19 +345,55 @@ const TaskModal = ({ requestDelete }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-wider text-secondary">Class</label>
-            <select
-              value={formData.class}
-              onChange={handleClassChange}
-              className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
-              aria-label="Select class"
-              aria-required="true"
-            >
-              {classes.length > 0 ? (
-                classes.map((c) => <option key={c} value={c}>{c}</option>)
-              ) : (
-                <option value="">No Classes Defined</option>
-              )}
-            </select>
+            {isAddingClass ? (
+              <div className="flex items-center gap-2">
+                <input
+                  ref={newClassInputRef}
+                  type="text"
+                  value={newClassName}
+                  onChange={(e) => setNewClassName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); handleAddNewClass(); }
+                    if (e.key === "Escape") { setIsAddingClass(false); setNewClassName(""); }
+                  }}
+                  placeholder="Class name..."
+                  maxLength={64}
+                  className="flex-1 p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                  aria-label="New class name"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddNewClass}
+                  className="p-2.5 rounded-lg bg-[#007AFF] text-white hover:bg-[#0066DD] transition-colors"
+                  aria-label="Confirm new class"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsAddingClass(false); setNewClassName(""); }}
+                  className="p-2.5 rounded-lg text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                  aria-label="Cancel new class"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <select
+                value={formData.class}
+                onChange={handleClassChange}
+                className="w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                aria-label="Select class"
+                aria-required="true"
+              >
+                {classes.length > 0 ? (
+                  classes.map((c) => <option key={c} value={c}>{c}</option>)
+                ) : (
+                  <option value="">No Classes Defined</option>
+                )}
+                <option value="__new_class__">+ Create new class...</option>
+              </select>
+            )}
           </div>
 
           <div className="space-y-1.5">

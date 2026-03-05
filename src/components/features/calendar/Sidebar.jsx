@@ -1,11 +1,13 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { format, parse } from "date-fns";
-import { Check, Clock, Calendar, AlertCircle, GripVertical, X, Filter, Circle, ChevronDown } from "lucide-react";
+import { Check, Clock, Calendar, AlertCircle, GripVertical, X, Filter, Circle, ChevronDown, Plus } from "lucide-react";
 import { isToday, isTomorrow, isPast, parseISO } from "date-fns";
 import Input from "../../ui/Input";
 import Button from "../../ui/Button"; 
 import { useUI } from "../../../context/PlannerContext"; 
 import { useDragDrop } from "../../../context/DragDropContext";
+import { useData } from "../../../context/DataContext";
+import { PALETTE } from "../../../utils/constants";
 
 
 const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
@@ -229,6 +231,30 @@ const Sidebar = ({
   }, [localSearch, setSearchQuery]);
   
   const { mobileMenuOpen, setMobileMenuOpen } = useUI(); 
+  const { setClassColors: setClassColorsCtx } = useData();
+
+  // Quick-add class state
+  const [isAddingClassInline, setIsAddingClassInline] = useState(false);
+  const [inlineClassName, setInlineClassName] = useState("");
+  const inlineClassInputRef = useRef(null);
+
+  const handleInlineAddClass = useCallback(() => {
+    const name = inlineClassName.trim();
+    if (!name || name.length < 2) return;
+    if (classColors[name]) {
+      // Already exists, just unhide it if hidden
+      setHiddenClasses(prev => prev.filter(c => c !== name));
+      setIsAddingClassInline(false);
+      setInlineClassName("");
+      return;
+    }
+    if (!/^[\w\s\-]{2,64}$/.test(name)) return;
+    const colorIndex = Object.keys(classColors).length;
+    const newColor = PALETTE[colorIndex % PALETTE.length];
+    setClassColorsCtx({ ...classColors, [name]: newColor });
+    setIsAddingClassInline(false);
+    setInlineClassName("");
+  }, [inlineClassName, classColors, setClassColorsCtx, setHiddenClasses]);
 
   // --- Task Grouping Logic ---
   const groupedTasks = useMemo(() => {
@@ -391,6 +417,65 @@ const Sidebar = ({
                   {cls}
                 </button>
               ))}
+              {/* Quick-add class button */}
+              {isAddingClassInline ? (
+                <div className="flex items-center gap-1 pointer-events-auto">
+                  <input
+                    ref={inlineClassInputRef}
+                    type="text"
+                    value={inlineClassName}
+                    onChange={(e) => setInlineClassName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleInlineAddClass();
+                      if (e.key === "Escape") { setIsAddingClassInline(false); setInlineClassName(""); }
+                    }}
+                    onBlur={() => {
+                      // Small delay to allow click on confirm button
+                      setTimeout(() => {
+                        if (!inlineClassName.trim()) {
+                          setIsAddingClassInline(false);
+                          setInlineClassName("");
+                        }
+                      }, 150);
+                    }}
+                    placeholder="Class name..."
+                    maxLength={64}
+                    className="w-24 px-2 py-0.5 text-[10px] rounded-lg border border-black/10 dark:border-white/10 bg-white/80 dark:bg-white/10 text-primary placeholder:text-secondary/50 outline-none focus:ring-2 focus:ring-blue-500/30"
+                    aria-label="New class name"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleInlineAddClass}
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-[#007AFF] text-white hover:bg-[#0066DD] transition-colors"
+                    aria-label="Confirm new class"
+                  >
+                    <Check className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsAddingClassInline(false); setInlineClassName(""); }}
+                    className="text-[10px] text-secondary hover:text-primary px-1 py-0.5 transition-colors"
+                    aria-label="Cancel"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsAddingClassInline(true);
+                    setTimeout(() => inlineClassInputRef.current?.focus(), 50);
+                  }}
+                  title="Add a new class"
+                  className="pointer-events-auto cursor-pointer text-[10px] font-bold px-2 py-1 rounded-lg transition-all whitespace-nowrap bg-white/50 dark:bg-white/5 border border-dashed border-black/10 dark:border-white/10 text-secondary hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 dark:hover:bg-white/10 dark:hover:text-blue-400 flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add
+                </button>
+              )}
             </div>
           </div>
 

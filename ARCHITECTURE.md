@@ -1,334 +1,411 @@
 # Architecture Documentation
 
-## 🏗️ System Overview
+## System Overview
 
-Homework Planner is a **zero-knowledge, offline-first Progressive Web App** that synchronizes encrypted task data across multiple devices in real-time.
+Homework Planner is a **zero-knowledge, offline-first Progressive Web App** that synchronizes encrypted task data across multiple devices in real-time using persistent server-side storage.
 
 ### Core Principles
 
-1. **Zero-Knowledge Encryption**: Server cannot read user data
-2. **Offline-First**: Works without internet, syncs when available
-3. **Real-Time Sync**: Changes propagate instantly across devices
-4. **No Accounts**: Uses room-based authentication instead of user accounts
-5. **Client-Side Security**: All encryption happens in the browser
+1. **Zero-Knowledge Encryption** — Server cannot read user data; it only stores and relays encrypted blobs
+2. **Offline-First** — Works without internet via localStorage + Service Worker; syncs when connectivity returns
+3. **Real-Time Sync** — Changes propagate instantly across devices via Socket.io WebSockets
+4. **No Accounts** — Room-based authentication using a Sync ID + password (no email, no username)
+5. **Client-Side Security** — All encryption/decryption happens in the browser using Web Crypto API
+6. **Optimistic Concurrency** — Version-based conflict detection with field-level 3-way merge
 
 ---
 
-## 📊 Architecture Diagram
+## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        CLIENT DEVICES                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────┐              ┌──────────────┐            │
-│  │   Browser A   │              │   Browser B   │            │
-│  ├──────────────┤              ├──────────────┤            │
-│  │ React App     │              │ React App     │            │
-│  │ + Context API │              │ + Context API │            │
-│  ├──────────────┤              ├──────────────┤            │
-│  │ localStorage  │              │ localStorage  │            │
-│  │ (Encrypted)   │              │ (Encrypted)   │            │
-│  └───────┬──────┘              └──────┬───────┘            │
-│          │                             │                     │
-│          │  ┌─────────────────┐       │                     │
-│          └──┤ Web Crypto API  │───────┘                     │
-│             │  (AES-GCM)      │                             │
-│             └─────────────────┘                             │
-│                     │                                        │
-└─────────────────────┼────────────────────────────────────────┘
-                      │ Encrypted Payloads
-                      │ (Socket.io)
-                      ↓
-            ┌─────────────────┐
-            │  RELAY SERVER   │
-            ├─────────────────┤
-            │  Socket.io      │
-            │  + JWT Auth     │
-            │  + Room Manager │
-            └─────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     CLIENT DEVICES                        │
+├──────────────────────────────────────────────────────────┤
+│                                                           │
+│  ┌──────────────┐            ┌──────────────┐            │
+│  │   Browser A   │            │   Browser B   │           │
+│  ├──────────────┤            ├──────────────┤            │
+│  │ React 19 App  │            │ React 19 App  │           │
+│  │ + Context API │            │ + Context API │           │
+│  ├──────────────┤            ├──────────────┤            │
+│  │ localStorage  │            │ localStorage  │           │
+│  │ (plaintext)   │            │ (plaintext)   │           │
+│  └───────┬──────┘            └──────┬───────┘            │
+│          │                          │                     │
+│          │  ┌──────────────────┐    │                     │
+│          └──┤  Web Crypto API  ├────┘                     │
+│             │  AES-GCM encrypt │                          │
+│             │  PBKDF2 key      │                          │
+│             └────────┬─────────┘                          │
+│                      │                                    │
+└──────────────────────┼────────────────────────────────────┘
+                       │ Encrypted Payloads + Version
+                       │ (Socket.io WebSockets)
+                       ↓
+             ┌──────────────────┐
+             │   RELAY SERVER    │
+             ├──────────────────┤
+             │  Express + Helmet │
+             │  Socket.io (nsp)  │
+             │  UUID Sessions    │
+             │  Rate Limiting    │
+             │  SSRF Protection  │
+             └────────┬─────────┘
                       │
-                      │ 10-min TTL
                       ↓
-            ┌─────────────────┐
-            │  In-Memory DB   │
-            │  (Encrypted     │
-            │   Blob Store)   │
-            └─────────────────┘
+             ┌──────────────────┐
+             │  SQLite (WAL)     │
+             │  better-sqlite3   │
+             ├──────────────────┤
+             │  rooms            │
+             │  events (versioned│
+             │    encrypted blobs│
+             │  sessions         │
+             └──────────────────┘
+             48-hour inactive TTL
+             (cascade delete)
 ```
 
 ---
 
-## 🔐 Security Architecture
+## Security Architecture
 
 ### Key Derivation Flow
 
-```javascript
-User Password + Salt (from server)
-          ↓
-    PBKDF2 (600k iterations)
-          ↓
+```
+User Password + Salt (fetched from server)
+          │
+          ▼
+    PBKDF2 (600,000 iterations, SHA-256)
+          │
      ┌────┴────┐
-     ↓         ↓
+     ▼         ▼
  AUTH Key   DATA Key
-(HMAC-256) (AES-GCM)
-     ↓         ↓
-  Sent to    Stays in
-  Server     Client
+(HMAC-256) (AES-GCM 256-bit)
+     │         │
+     ▼         ▼
+  Hashed &   Stays in
+  sent to    browser
+  server     (never sent)
 ```
 
-### Encryption Process
+### Encryption Pipeline
 
 ```
 1. User creates/edits task
    ↓
-2. DataContext.addEvent()
+2. DataContext updates local state (optimistic)
    ↓
-3. useSocketSync.encryptEvent()
-   │  - Generate unique IV
+3. useSocketSync.addEvent() / updateEvent()
+   │  - Generate unique 12-byte IV
    │  - AES-GCM encrypt with DATA key
-   │  - Bundle: { iv, data, id }
+   │  - Bundle: { id, iv, data }
    ↓
-4. Socket.emit('event:save', encrypted)
+4. Socket.emit('event:save', { event, version })
    ↓
-5. Server stores encrypted blob
+5. Server checks version against DB
+   │  - Match → store blob, increment version, broadcast
+   │  - Mismatch → return { conflict: true, serverEvent, serverVersion }
    ↓
-6. Server broadcasts to other clients
+6. On success: other clients receive 'event:sync'
    ↓
-7. useSocketSync.decryptEvent()
-   │  - Extract IV and ciphertext
-   │  - AES-GCM decrypt with DATA key
+7. useSocketSync.handleEventSync()
+   │  - Decrypt with DATA key
+   │  - Update local state + version map
    ↓
-8. DataContext updates local state
+8. On conflict: client performs 3-way merge (see below)
 ```
 
 ### Why This Is Secure
 
-- **Server Blindness**: Server only sees encrypted blobs, can't decrypt
-- **Key Separation**: AUTH key proves identity, DATA key encrypts (never sent)
-- **Perfect Forward Secrecy**: Each encryption uses unique IV
-- **Brute Force Resistant**: 600k PBKDF2 iterations takes ~500ms per attempt
-- **No Plaintext Storage**: Even localStorage contains encrypted data
+| Property | Mechanism |
+|----------|-----------|
+| **Server Blindness** | Server only sees encrypted blobs — no plaintext ever touches the backend |
+| **Key Separation** | AUTH key proves identity; DATA key encrypts (never sent to server) |
+| **Unique IVs** | Every encryption uses a fresh 12-byte random IV |
+| **Brute Force Resistant** | 600k PBKDF2 iterations ≈ 500ms per attempt |
+| **Timing-Safe Auth** | `crypto.timingSafeEqual` for hash comparison on login |
+| **SSRF Protection** | DNS resolution validated against private IP ranges; direct IP connection prevents DNS rebinding |
 
 ---
 
-## 🎨 Frontend Architecture
+## Frontend Architecture
 
-### State Management
+### Provider Hierarchy
 
 ```
 App.jsx
-  ↓
-ErrorBoundary
-  ↓
-NotificationProvider (Toast messages)
-  ↓
-AuthProvider (Room auth, JWT token)
-  ↓
-DataProvider (Events, sync)
-  ↓
-UIProvider (View modes, modals)
-  ↓
-DragDropProvider (Task rescheduling)
-  ↓
-PlannerApp (Main UI)
+  └─ ErrorBoundary
+      └─ NotificationProvider     (toast messages)
+          └─ AuthProvider          (room auth, session token, crypto key)
+              └─ DataProvider      (events, classColors, CRUD, sync)
+                  └─ PlannerProvider (view mode, currentDate, UI state)
+                      └─ DragDropProvider (task rescheduling)
+                          └─ MainLayout (app shell)
 ```
 
 ### Context Responsibilities
 
-| Context | Purpose | State Items |
-|---------|---------|-------------|
-| **AuthContext** | Authentication | `roomId`, `authToken`, `cryptoKey`, `isAuthorized` |
-| **DataContext** | Business Logic | `events`, `classColors`, `hiddenClasses`, CRUD operations |
-| **UIContext** | Presentation | `darkMode`, `view`, `modals`, `filters`, `currentDate` |
-| **NotificationContext** | User Feedback | Toast queue, show/dismiss methods |
-| **DragDropContext** | Interactions | Drag state, drop handlers |
+| Context | Purpose | Key State |
+|---------|---------|-----------|
+| **AuthContext** | Authentication handshake, key derivation | `roomId`, `authToken`, `cryptoKey`, `isAuthorized` |
+| **DataContext** | Business logic, CRUD, sync orchestration | `events`, `classColors`, `hiddenClasses`, `peerCount`, all mutation callbacks |
+| **PlannerContext** | View state, UI preferences | `view`, `currentDate`, `darkMode`, `selectedDate`, modals |
+| **NotificationContext** | User feedback | Toast queue, `notify.success()` / `notify.error()` |
+| **DragDropContext** | Drag interactions | Drag state, drop handlers for date rescheduling |
 
-### Data Flow Patterns
+### DataContext Exports
 
-#### Optimistic Updates
-```javascript
-// 1. Update UI immediately (optimistic)
-setEvents(prev => [...prev, newEvent]);
+The `DataContext` provider exposes the following via `useData()`:
 
-// 2. Sync to server in background
-if (isAuthorized) {
-  socket.emit('event:save', await encrypt(newEvent));
-}
-
-// 3. If sync fails, rollback
-.catch(() => {
-  setEvents(prev => prev.filter(e => e.id !== newEvent.id));
-  notify.error('Sync failed. Changes reverted.');
-});
-```
-
-#### Conflict Resolution
-```javascript
-// Last-write-wins (simple but effective for this use case)
-socket.on('event:sync', async (encrypted) => {
-  const remote = await decrypt(encrypted);
-  setEvents(prev => {
-    const exists = prev.find(e => e.id === remote.id);
-    if (exists) {
-      // Replace local with remote (server has latest)
-      return prev.map(e => e.id === remote.id ? remote : e);
-    }
-    // Add new event
-    return [...prev, remote];
-  });
-});
-```
+| Property | Description |
+|----------|-------------|
+| `events` / `setEvents` | Event array + setter |
+| `classColors` / `setClassColors` | Class-to-color mapping |
+| `hiddenClasses` / `setHiddenClasses` | Hidden class filter list |
+| `addEvent` | Create event(s) with recurrence expansion |
+| `updateEvent` | Edit event (with group propagation) |
+| `deleteEvent` | Delete event (with group deletion) |
+| `bulkAddEvents` | Import multiple events at once |
+| `bulkDeleteEvents` | Delete multiple events by ID array |
+| `toggleTaskCompletion` | Mark task complete/incomplete |
+| `deleteClass` / `mergeClasses` / `renameClass` | Class management operations |
+| `refreshClassColors` | Re-derive colors from current events |
+| `importJsonData` | Import from JSON |
+| `exportICS` / `processICSContent` / `importICSFromUrl` | ICS import/export |
+| `resetAllData` | Clear all local data |
+| `isAuthorized` | Whether connected to a sync room |
+| `peerCount` | Number of connected devices |
 
 ---
 
-## 🔄 Synchronization Strategy
+## Synchronization Strategy
 
 ### Connection Lifecycle
 
 ```
 1. User enters Room ID + Password
    ↓
-2. AuthContext.useRoomAuth()
-   │  - Fetch salt from server
-   │  - Derive AUTH and DATA keys
-   │  - Login with AUTH key
-   │  - Receive JWT token
+2. useRoomAuth()
+   │  - POST /api/auth/init  → get salt (or generate for new room)
+   │  - PBKDF2 derive AUTH key + DATA key
+   │  - POST /api/auth/login → get session token
    ↓
-3. DataContext.useSocketSync()
-   │  - Connect socket with JWT
-   │  - Join room
-   │  - Fetch existing events
+3. useSocketSync()
+   │  - Connect socket with token + roomId
+   │  - Socket middleware verifies session
+   │  - Emit 'join' to enter room
+   │  - GET /api/rooms/:roomId/events → fetch encrypted events
+   │  - Decrypt all events with DATA key
    ↓
-4. If server has no data:
-   │  Re-seed from localStorage
-   │  (Handles 10-min TTL cleanup)
+4. If server has fewer events than localStorage:
+   │  - Re-seed server via bulkAddEvents (handles 48-hour cleanup gap)
    ↓
-5. Listen for updates
+5. Listen for real-time updates:
    │  - event:sync (single update)
-   │  - event:bulk_sync (multiple)
-   │  - event:remove (deletion)
-   │  - meta:sync (colors)
+   │  - event:bulk_sync (batch updates)
+   │  - event:remove (single deletion)
+   │  - event:bulk_remove (batch deletion)
+   │  - meta:sync (class colors)
+   │  - room:count (peer count)
+```
+
+### Version-Based Conflict Resolution (OCC)
+
+```
+1. Client A edits event (version 3)
+2. Client B edits same event (version 3)
+3. Client A saves first → server accepts, version becomes 4
+4. Client B sends version 3 → server detects mismatch, returns conflict
+
+Client B conflict handler:
+   ├─ Decrypt server event (version 4)
+   ├─ Retrieve base event from baseEventsRef (version 3 snapshot)
+   ├─ fieldLevelMerge(base, localEdit, serverEdit)
+   │   ├─ Compare each field against base
+   │   ├─ If only one side changed a field → take that change
+   │   ├─ If both changed same field to same value → no conflict
+   │   └─ If both changed same field differently → merge fails
+   ├─ Success → encrypt merged result, save with serverVersion
+   └─ Failure → fall back to last-write-wins (force: true)
 ```
 
 ### Offline Handling
 
-```javascript
-// App works offline via localStorage persistence
-if (!navigator.onLine || !socket.connected) {
-  // All changes go to localStorage
-  localStorage.setItem('hw_events', JSON.stringify(events));
-}
+```
+Online:
+  DataContext → useSocketSync → encrypt → socket.emit → server → broadcast
 
-// On reconnection
-socket.on('connect', () => {
-  // Re-authenticate
-  socket.emit('join', roomId);
-  
-  // Re-seed if server data was cleared
-  if (serverEvents.length === 0 && localEvents.length > 0) {
-    bulkUpload(localEvents);
-  }
-});
+Offline:
+  DataContext → localStorage only (no socket)
+
+Reconnect:
+  socket 'connect' → join room → compare server vs. local
+  → re-seed if server was cleaned up during offline period
 ```
 
 ---
 
-## 📦 Component Structure
+## Component Structure
 
 ### Feature Components
 
 ```
-components/
-├── features/
-│   ├── auth/
-│   │   └── ReLoginModal.jsx         # Re-auth on token expiry
-│   ├── calendar/
-│   │   ├── CalendarView.jsx         # Month/Week/Day views
-│   │   └── Sidebar.jsx              # Task list + filters
-│   ├── onboarding/
-│   │   └── SetupScreen.jsx          # Initial room setup
-│   ├── settings/
-│   │   ├── ApiConfigContent.jsx     # API endpoint config
-│   │   ├── ClassManager.jsx         # Course management
-│   │   ├── ImportContent.jsx        # ICS import
-│   │   └── SyncRoomContent.jsx      # Room sync settings
-│   └── tasks/
-│       └── (No direct task components - integrated in modals)
+components/features/
+├── auth/
+│   └── ReLoginModal.jsx           # Re-auth when session expires
+├── calendar/
+│   ├── CalendarView.jsx           # Month/Week/Day/Agenda views
+│   └── Sidebar.jsx                # Task list + class filters
+├── onboarding/
+│   └── SetupScreen.jsx            # Initial room setup wizard
+└── settings/
+    ├── ApiConfigContent.jsx       # Custom API endpoint config
+    ├── ClassManager.jsx           # Course list management
+    ├── ClassRow.jsx               # Individual class row
+    ├── DateCleanerContent.jsx     # Bulk delete by date range
+    ├── ImportContent.jsx          # ICS/JSON import
+    ├── JsonEditorModal.jsx        # Raw JSON event editor
+    ├── MergeContent.jsx           # Merge two classes
+    └── SyncRoomContent.jsx        # Room connection settings
+
 ```
 
 ### Shared Components
 
 ```
 components/
-├── ui/                              # Design system primitives
-│   ├── Button.jsx                   # Reusable button
-│   ├── Card.jsx                     # Container card
-│   ├── Input.jsx                    # Form input
-│   ├── Modal.jsx                    # Dialog wrapper
-│   ├── ErrorBoundary.jsx            # Global error catcher
-│   └── FeatureErrorBoundary.jsx     # Feature-level errors
+├── ui/                            # Design system primitives
+│   ├── Button.jsx
+│   ├── Card.jsx
+│   ├── CollapsibleCard.jsx
+│   ├── Input.jsx
+│   ├── Modal.jsx
+│   ├── ErrorBoundary.jsx          # Global error catcher
+│   └── FeatureErrorBoundary.jsx   # Feature-level error isolation
 ├── layout/
-│   └── MainLayout.jsx               # App shell (header + content)
+│   └── MainLayout.jsx             # App shell (header + content)
 ├── modals/
-│   ├── TaskModal.jsx                # Create/edit tasks
-│   ├── SettingsModal.jsx            # App settings
-│   └── ConfirmationModal.jsx        # Confirmation dialogs
+│   ├── TaskModal.jsx              # Create/edit tasks
+│   ├── SettingsModal.jsx          # App settings
+│   └── ConfirmationModal.jsx      # Confirmation dialogs
 └── managers/
-    └── ModalManager.jsx             # Centralized modal rendering
+    └── ModalManager.jsx           # Centralized modal rendering
 ```
 
 ---
 
-## 🪝 Custom Hooks
+## Custom Hooks
 
 | Hook | Purpose | Key Features |
 |------|---------|--------------|
-| `useRoomAuth` | Authentication handshake | Rate limiting, key derivation, JWT management |
-| `useSocketSync` | Real-time sync | Encryption, conflict resolution, reconnection |
-| `useFilteredEvents` | Event filtering | Search, type filter, date range, completion |
-| `useTaskDragAndDrop` | Drag interactions | Date rescheduling, optimistic updates |
-| `usePWA` | PWA features | Service worker, install prompt, updates |
-| `useDebounce` | Input debouncing | Prevents excessive re-renders |
+| `useRoomAuth` | Authentication handshake | PBKDF2 key derivation, salt fetch, session management |
+| `useSocketSync` | Real-time encrypted sync | Encryption pipeline, OCC, 3-way merge, reconnection with backoff |
+| `useFilteredEvents` | Event filtering/search | Text search, type filter, date range, completion status |
+| `useTaskDragAndDrop` | Drag interactions | Date rescheduling with optimistic updates |
+| `usePWA` | PWA lifecycle | Service worker registration, install prompt, update detection |
+| `useDebounce` | Input debouncing | Prevents excessive re-renders on rapid input |
+| `useKeyboardShortcuts` | Keyboard navigation | Global shortcuts for common actions |
+| `usePerformance` | Performance monitoring | Custom timing measurements |
 
 ---
 
-## 🧰 Utility Modules
+## Utility Modules
 
-### Crypto (`utils/crypto.js`)
-- `deriveKey(password, salt, purpose)` - PBKDF2 key derivation
-- `encryptEvent(event, key)` - AES-GCM encryption
-- `decryptEvent(encrypted, key)` - AES-GCM decryption
-- `generateSalt()` - Random salt generation
-
-### Helpers (`utils/helpers.js`)
-- `normalizeEvent(raw)` - Event structure validation
-- `validateEvent(event)` - Business rule validation
-- `sanitizeInput(str)` - XSS prevention
-- `generateICS(events)` - Calendar export
-- `compareTasks(a, b)` - Task sorting logic
-
-### Constants (`utils/constants.js`)
-- Storage keys
-- API configuration
-- Socket event names
-- Crypto parameters
-- UI limits
-
-### Logger (`utils/logger.js`)
-- Production-safe logging
-- Conditional output (dev only)
-- Consistent formatting
+| Module | Key Exports |
+|--------|-------------|
+| **crypto.js** | `deriveKey()`, `encryptEvent()`, `decryptEvent()`, `generateSalt()` |
+| **helpers.js** | `normalizeEvent()`, `validateEvent()`, `sanitizeInput()`, `compareTasks()` |
+| **mergeUtils.js** | `fieldLevelMerge()` — 3-way field merge for conflict resolution |
+| **constants.js** | `STORAGE_KEYS`, `SOCKET_EVENTS`, `EVENT_TYPES`, `PALETTE`, `PBKDF2_ITERATIONS`, API config |
+| **icsHelpers.js** | ICS parsing and generation utilities |
+| **logger.js** | Production-safe conditional logging |
+| **performance.js** | Performance measurement utilities |
+| **webVitals.js** | Core Web Vitals tracking |
 
 ---
 
-## 🧪 Testing Strategy
+## Backend Architecture
+
+### Server Stack
+
+- **Express** — HTTP routing + middleware
+- **Socket.io** — Real-time WebSocket communication (namespaced at `/backend`)
+- **better-sqlite3** — Persistent SQLite database with WAL mode
+- **Helmet** — Strict HTTP security headers (CSP, CORP, COEP, COOP)
+
+### Database Schema
+
+```sql
+rooms (
+  id TEXT PRIMARY KEY,
+  salt TEXT NOT NULL,
+  auth_hash TEXT NOT NULL,
+  meta TEXT,                          -- JSON: class colors, etc.
+  created_at DATETIME,
+  last_active DATETIME
+)
+
+events (
+  room_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  iv TEXT NOT NULL,                   -- AES-GCM initialization vector
+  data TEXT NOT NULL,                 -- Encrypted blob (ciphertext)
+  version INTEGER NOT NULL DEFAULT 1, -- OCC version counter
+  updated_at DATETIME,
+  PRIMARY KEY (room_id, id),
+  FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
+)
+
+sessions (
+  token TEXT PRIMARY KEY,             -- UUID
+  room_id TEXT NOT NULL,
+  created_at DATETIME,
+  FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
+)
+```
+
+### Socket Events
+
+| Event | Direction | Purpose |
+|-------|-----------|---------|
+| `join` | Client → Server | Join a room |
+| `event:save` | Client → Server | Save single event (with version for OCC) |
+| `event:bulk_save` | Client → Server | Save batch of events |
+| `event:delete` | Client → Server | Delete single event |
+| `event:bulk_delete` | Client → Server | Delete batch of events |
+| `meta:save` | Client → Server | Save room metadata (class colors) |
+| `event:sync` | Server → Client | Broadcast single event update |
+| `event:bulk_sync` | Server → Client | Broadcast batch updates |
+| `event:remove` | Server → Client | Broadcast single deletion |
+| `event:bulk_remove` | Server → Client | Broadcast batch deletions |
+| `meta:sync` | Server → Client | Broadcast metadata update |
+| `room:count` | Server → Client | Current peer count |
+
+### Rate Limits
+
+| Layer | Limit |
+|-------|-------|
+| HTTP login | 10 attempts / 60s per IP |
+| Socket connections | 30 / 60s per IP |
+| Concurrent sockets | 20 per IP |
+| Socket events | 80 / 10s per socket |
+
+### Maintenance
+
+- **Room cleanup:** Every ~66 minutes, rooms inactive for 48 hours are cascade-deleted (rooms + events + sessions)
+- **Session purge:** Expired sessions (>24h) cleaned up on the same schedule
+- **WAL checkpoint:** `TRUNCATE` checkpoint runs with each cleanup cycle
+
+---
+
+## Testing Strategy
 
 ### Test Pyramid
 
 ```
         ┌────────┐
-        │  E2E   │  ← Cypress (planned)
+        │  E2E   │  ← Planned (Cypress)
         └────────┘
       ┌────────────┐
       │Integration │  ← Vitest + React Testing Library
@@ -338,67 +415,31 @@ components/
     └──────────────────┘
 ```
 
-### Coverage Goals
+### Test Files
 
-| Module | Target | Current | Critical Paths |
-|--------|--------|---------|----------------|
-| Crypto | 100% | ~95% | All functions |
-| Helpers | 90% | ~85% | Validation, sanitization |
-| Hooks | 80% | ~60% | Auth flow, sync logic |
-| Components | 70% | ~30% | User interactions |
+| File | Coverage Area |
+|------|--------------|
+| `crypto.test.js` | Encryption/decryption, key derivation |
+| `helpers.test.js` | Utility functions, validation |
+| `merge.test.js` | 3-way field merge logic |
+| `validation.test.js` | Input validation |
+| `hooks.test.js` | Custom hook behavior |
+| `components.test.jsx` | Component rendering and interaction |
+| `integration.test.js` | Cross-module integration |
 
 ---
 
-## 🚀 Performance Optimizations
-
-### Implemented
+## Performance Optimizations
 
 1. **React.memo** on expensive components (CalendarView)
-2. **useMemo** for filtered/sorted data
-3. **useCallback** for stable function references
+2. **useMemo** for filtered/sorted data derivation
+3. **useCallback** for stable function references in context
 4. **Web Worker** for ICS parsing (offloads main thread)
-5. **Lazy Loading** for modals (not yet implemented)
-6. **Virtual Scrolling** for large task lists (not yet implemented)
-
-### Monitoring
-
-- Performance API for custom measurements
-- FCP/LCP tracking in development
-- Bundle size monitoring via Vite
+5. **Prepared Statements** — all SQL queries pre-compiled at server startup
+6. **SQLite Transactions** — bulk operations use `db.transaction()` for atomicity and performance
+7. **WAL Mode** — concurrent reads during writes
+8. **Debounced inputs** to prevent excessive re-renders
 
 ---
 
-## 🔮 Future Architecture Considerations
-
-### Planned Improvements
-
-1. **Conflict Resolution**: CRDTs for better multi-device editing
-2. **Compression**: Gzip encrypted payloads before transmission
-3. **Versioning**: Migration system for data schema changes
-4. **Analytics**: Privacy-preserving usage metrics
-5. **Accessibility**: Full WCAG 2.1 AA compliance
-
-### Scalability
-
-Current architecture supports:
-- ✅ 5-10 concurrent devices per room
-- ✅ 1000+ events per user
-- ✅ 100+ KB localStorage usage
-
-Future scaling:
-- IndexedDB for larger datasets (10k+ events)
-- Selective sync (date range filtering)
-- Compression for bandwidth optimization
-
----
-
-## 📚 Further Reading
-
-- [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
-- [Socket.io Client API](https://socket.io/docs/v4/client-api/)
-- [React Context Best Practices](https://react.dev/reference/react/useContext)
-- [PWA Documentation](https://web.dev/progressive-web-apps/)
-
----
-
-**Last Updated**: February 1, 2026
+**Last Updated:** March 2026

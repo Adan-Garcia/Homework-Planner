@@ -274,8 +274,18 @@ export const DataProvider = ({ children }) => {
         if (isAuthorized) serverAdd(eventWithId);
         else setEvents((prev) => [...prev, eventWithId]);
       }
+
+      // Auto-assign color to new class if one doesn't exist yet
+      const className = event.class || 'General';
+      if (className && !classColors[className]) {
+        const colorIndex = Object.keys(classColors).length;
+        const newColor = PALETTE[colorIndex % PALETTE.length];
+        const updated = { ...classColors, [className]: newColor };
+        setClassColors(updated);
+        if (isAuthorized) syncColors(updated);
+      }
     },
-    [isAuthorized, serverAdd, bulkAddEvents, setEvents],
+    [isAuthorized, serverAdd, bulkAddEvents, setEvents, classColors, syncColors],
   );
 
   /**
@@ -595,6 +605,7 @@ export const DataProvider = ({ children }) => {
       updateEvent,
       deleteEvent,
       bulkAddEvents,
+      bulkDeleteEvents,
       toggleTaskCompletion,
       deleteClass,
       mergeClasses,
@@ -617,6 +628,7 @@ export const DataProvider = ({ children }) => {
       updateEvent,
       deleteEvent,
       bulkAddEvents,
+      bulkDeleteEvents,
       toggleTaskCompletion,
       deleteClass,
       mergeClasses,
