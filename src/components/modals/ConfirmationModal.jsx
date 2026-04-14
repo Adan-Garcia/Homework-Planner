@@ -1,6 +1,7 @@
 import React from "react";
 import PropTypes from "prop-types";
 import { AlertTriangle } from "lucide-react";
+import Button from "../ui/Button";
 
 const ConfirmationModal = ({
   isOpen,
@@ -16,38 +17,40 @@ const ConfirmationModal = ({
 
   return (
     <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-700 overflow-hidden transform transition-all scale-100">
+      <div className="surface-modal rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-4">
             <div
-              className={`p-2 rounded-full ${isDanger ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-600"}`}
+              className={isDanger ? "status-error p-2 rounded-full flex-none justify-center" : "status-warning p-2 rounded-full flex-none justify-center"}
             >
               <AlertTriangle className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+            <h3 className="text-lg font-bold text-primary">
               {title}
             </h3>
           </div>
-          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+          <p className="text-sm text-secondary leading-relaxed">
             {message}
           </p>
         </div>
-        <div className="bg-slate-50 dark:bg-slate-700/50 p-4 flex gap-3 justify-end border-t border-slate-100 dark:border-slate-700">
-          <button
+        <div className="bg-white/40 dark:bg-white/5 p-4 flex gap-3 justify-end border-t border-divider backdrop-blur-xl">
+          <Button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors"
+            variant="ghost"
+            className="px-4 py-2 text-sm font-semibold"
           >
             {cancelText}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               onConfirm();
               onClose();
             }}
-            className={`px-4 py-2 text-sm font-bold text-white rounded-lg shadow-sm transition-transform active:scale-95 ${isDanger ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}`}
+            variant={isDanger ? "danger" : "primary"}
+            className="px-4 py-2 text-sm font-bold shadow-sm transition-transform active:scale-95"
           >
             {confirmText}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

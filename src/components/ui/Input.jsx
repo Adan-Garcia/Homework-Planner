@@ -27,7 +27,7 @@ const Input = forwardRef(({ label, error, className = "", id, ...props }, ref) =
         aria-describedby={errorId}
         {...props}
       />
-      {error && <p id={errorId} className="text-xs text-red-500" role="alert">{error}</p>}
+      {error && <p id={errorId} className="status-error" role="alert">{error}</p>}
     </div>
   );
 });

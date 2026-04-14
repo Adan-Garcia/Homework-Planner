@@ -43,7 +43,7 @@ class FeatureErrorBoundary extends React.Component {
             <AlertTriangle className="w-8 h-8" />
             <h2 className="text-xl font-bold">Something went wrong</h2>
           </div>
-          <p className="text-sm text-secondary text-center max-w-md">
+          <p className="status-error text-sm text-center max-w-md">
             {this.props.errorMessage || 
               `The ${this.props.featureName} feature encountered an error. Please try again.`}
           </p>

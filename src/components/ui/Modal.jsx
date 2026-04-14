@@ -127,12 +127,12 @@ const Modal = ({
       >
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-black/5 dark:border-white/5 shrink-0 bg-white/40 dark:bg-white/5 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-divider shrink-0 bg-white/40 dark:bg-white/5 backdrop-blur-xl">
           <h3 id="modal-title" className="text-xl font-bold text-primary tracking-tight">{title}</h3>
           <Button 
             variant="ghost" 
             onClick={onClose} 
-            className="!p-1.5 rounded-full text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            className="btn-icon !p-1.5 text-secondary hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />
@@ -146,7 +146,7 @@ const Modal = ({
 
         {/* Footer (Optional) */}
         {footer && (
-          <div className="px-6 py-4 border-t border-black/5 dark:border-white/5 bg-white/40 dark:bg-white/5 shrink-0 flex justify-end gap-3 flex-wrap backdrop-blur-xl">
+          <div className="px-6 py-4 border-t border-divider bg-white/40 dark:bg-white/5 shrink-0 flex justify-end gap-3 flex-wrap backdrop-blur-xl">
             {footer}
           </div>
         )}

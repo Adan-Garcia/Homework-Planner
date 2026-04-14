@@ -57,12 +57,12 @@ const ApiConfigContent = () => {
 
   return (
     <div className="space-y-4">
-      <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-900/20">
+      <div className="status-info p-4 rounded-xl text-sm">
         <h3 className="font-bold text-blue-800 dark:text-blue-200 mb-2 flex items-center gap-2">
           <Server className="w-4 h-4" />
           Backend Configuration
         </h3>
-        <p className="text-xs text-blue-700 dark:text-blue-300 opacity-80">
+        <p className="text-xs opacity-80">
           Configure your custom backend server for local hosting or alternative deployments.
         </p>
       </div>
@@ -73,7 +73,7 @@ const ApiConfigContent = () => {
           <label className="text-[10px] uppercase tracking-wider font-semibold text-secondary px-1 block mb-2">
             Current API URL
           </label>
-          <div className="p-2.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs text-secondary font-mono break-all">
+          <div className="p-2.5 rounded-lg border-base bg-black/5 dark:bg-white/5 text-xs text-secondary font-mono break-all">
             {getApiBaseUrl()}
           </div>
         </div>
@@ -88,7 +88,7 @@ const ApiConfigContent = () => {
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
             placeholder={defaultUrl}
-            className="w-full px-3 py-2.5 rounded-lg text-sm bg-white/60 dark:bg-white/5 border border-white/40 dark:border-white/10 text-primary placeholder-secondary focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2.5 rounded-lg text-sm surface-input text-input placeholder:text-secondary focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <p className="text-[9px] text-secondary mt-1 px-1">
             Examples: https://localhost:3000/backend, https://api.example.com/backend
@@ -97,15 +97,7 @@ const ApiConfigContent = () => {
 
         {/* Test Status */}
         {testStatus && (
-          <div
-            className={`p-3 rounded-lg text-xs flex items-start gap-2 ${
-              testStatus === "testing"
-                ? "bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 text-blue-700 dark:text-blue-300"
-                : testStatus === "success"
-                  ? "bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/20 text-green-700 dark:text-green-300"
-                  : "bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 text-red-700 dark:text-red-300"
-            }`}
-          >
+          <div className={testStatus === "testing" ? "status-info" : testStatus === "success" ? "status-success" : "status-error"}>
             {testStatus === "testing" ? (
               <>
                 <span className="inline-block animate-spin">⏳</span>
@@ -127,7 +119,7 @@ const ApiConfigContent = () => {
 
         {/* Save Status */}
         {isSaved && (
-          <div className="p-3 rounded-lg text-xs bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/20 text-green-700 dark:text-green-300 flex items-center gap-2">
+          <div className="status-success text-xs">
             <Check className="w-4 h-4" />
             Settings saved successfully!
           </div>
@@ -138,28 +130,28 @@ const ApiConfigContent = () => {
           <button
             onClick={handleTestConnection}
             disabled={testStatus === "testing" || !apiUrl.trim()}
-            className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors bg-blue-500 hover:bg-blue-600 disabled:bg-slate-300 dark:disabled:bg-slate-600 text-white disabled:text-secondary"
+            className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors btn-primary disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:text-secondary"
           >
             {testStatus === "testing" ? "Testing..." : "Test Connection"}
           </button>
           <button
             onClick={handleSave}
             disabled={apiUrl === getApiBaseUrl()}
-            className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors bg-green-500 hover:bg-green-600 disabled:bg-slate-300 dark:disabled:bg-slate-600 text-white disabled:text-secondary"
+            className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors bg-green-600 hover:bg-green-700 disabled:bg-slate-300 dark:disabled:bg-slate-600 text-white disabled:text-secondary"
           >
             Save
           </button>
           <button
             onClick={handleReset}
             title="Reset to default production API"
-            className="px-3 py-2 rounded-lg text-xs font-semibold transition-colors bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-primary"
+            className="px-3 py-2 rounded-lg text-xs font-semibold transition-colors btn-secondary"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900/20 text-[9px] text-orange-700 dark:text-orange-300">
+      <div className="status-warning text-[9px]">
         <strong>⚠️ Note:</strong> Changing the API URL will require page reload to take effect on all operations.
         You may need to clear browser cache and localStorage if you encounter authentication issues.
       </div>

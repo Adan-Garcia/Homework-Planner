@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { validateEvent, normalizeEvent, sanitizeInput, getContrastColor } from "../utils/helpers";
+import { validateEvent, normalizeEvent, sanitizeInput, getContrastColor, getContrastRatio, isReadableContrast, parseCssColor } from "../utils/helpers";
+import { validateTask } from "../utils/helpers";
 
 describe("Event Validation", () => {
   it("validates required fields", () => {
@@ -130,5 +131,62 @@ describe("Color Contrast", () => {
   it("handles null/undefined gracefully", () => {
     expect(getContrastColor(null)).toBe("#000000");
     expect(getContrastColor(undefined)).toBe("#000000");
+  });
+
+  it("calculates contrast ratio", () => {
+    expect(getContrastRatio("#000000", "#ffffff")).toBeGreaterThan(20);
+    expect(getContrastRatio("#777777", "#ffffff")).toBeLessThan(4.5);
+  });
+
+  it("checks readability against WCAG threshold", () => {
+    expect(isReadableContrast("#111111", "#ffffff")).toBe(true);
+    expect(isReadableContrast("#aaaaaa", "#ffffff")).toBe(false);
+  });
+
+  it("parses hex and rgba css colors", () => {
+    expect(parseCssColor("#abc")).toEqual({ r: 170, g: 187, b: 204, a: 1 });
+    expect(parseCssColor("rgba(10, 20, 30, 0.5)")).toEqual({ r: 10, g: 20, b: 30, a: 0.5 });
+  });
+
+  it("returns null for invalid css colors", () => {
+    expect(parseCssColor("invalid")).toBe(null);
+  });
+});
+
+describe("Task Validation", () => {
+  it("validates a valid task", () => {
+    const task = {
+      title: "Complete Homework",
+      description: "Math exercises",
+      date: "2026-04-13",
+      priority: "Normal",
+    };
+    const result = validateTask(task);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toBeNull();
+  });
+
+  it("rejects a task with missing title", () => {
+    const task = {
+      title: "",
+      description: "Math exercises",
+      date: "2026-04-13",
+      priority: "Normal",
+    };
+    const result = validateTask(task);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toHaveLength(1);
+  });
+
+  it("rejects a task with invalid date format", () => {
+    const task = {
+      title: "Complete Homework",
+      description: "Math exercises",
+      date: "13-04-2026",
+      priority: "Normal",
+    };
+    const result = validateTask(task);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toHaveLength(1);
   });
 });

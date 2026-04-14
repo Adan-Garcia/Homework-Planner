@@ -25,84 +25,84 @@ import { useDragDrop } from "../../../context/DragDropContext";
 
 /**
  * CalendarTaskCard Component
- * * Displays a single task in the calendar with completion toggle
- * * Supports compact and expanded modes
- * * Includes drag-and-drop functionality for rescheduling
+ * Updated to use date-fns for date formatting
  */
-const CalendarTaskCard = ({ task, isCompact = false, classColors, onEventClick, toggleTask, draggedEventId, handleDragStart }) => (
-  <div
-    draggable={!task.completed}
-    onDragStart={(e) => handleDragStart(e, task.id)}
-    onClick={(e) => {
-      e.stopPropagation();
-      onEventClick(task);
-    }}
-    role="button"
-    tabIndex={0}
-    aria-label={`${task.title}, ${task.class}, ${task.completed ? 'completed' : 'incomplete'}, ${task.priority} priority${task.time ? `, scheduled for ${task.time}` : ''}`}
-    onKeyDown={(e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
+const CalendarTaskCard = ({ task, isCompact = false, classColors, onEventClick, toggleTask, draggedEventId, handleDragStart }) => {
+  return (
+    <div
+      draggable={!task.completed}
+      onDragStart={(e) => handleDragStart(e, task.id)}
+      onClick={(e) => {
+        e.stopPropagation();
         onEventClick(task);
-      }
-    }}
-    className={`
-      cursor-pointer overflow-hidden transition-all duration-300 group relative backdrop-blur-sm
-      ${isCompact ? "px-2 py-1 mb-1 rounded-lg text-[10px] border-l-2" : "p-3 mb-2 rounded-2xl border border-white/50 dark:border-white/5 shadow-sm"}
-      ${task.completed ? "opacity-40 grayscale bg-black/5 dark:bg-white/5" : "bg-white/80 dark:bg-white/10 hover:bg-white hover:shadow-lg hover:-translate-y-0.5 hover:scale-[1.02] dark:hover:bg-white/20"}
-      ${draggedEventId === task.id ? "opacity-30" : ""}
-    `}
-    style={{ 
-      borderLeftColor: isCompact ? classColors[task.class] : undefined,
-      backgroundColor: isCompact ? `${classColors[task.class]}25` : undefined 
-    }}
-  >
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`${task.title}, ${task.class}, ${task.completed ? 'completed' : 'incomplete'}, ${task.priority} priority${task.time ? `, scheduled for ${task.time}` : ''}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onEventClick(task);
+        }
+      }}
+      className={`
+        cursor-pointer overflow-hidden transition-all duration-300 group relative backdrop-blur-sm
+        ${isCompact ? "px-2 py-1 mb-1 rounded-lg text-[10px] border-l-2" : "p-3 mb-2 rounded-2xl border border-white/50 dark:border-white/5 shadow-sm"}
+        ${task.completed ? "opacity-40 grayscale bg-black/5 dark:bg-white/5" : "bg-white/80 dark:bg-white/10 hover:bg-white hover:shadow-lg hover:-translate-y-0.5 hover:scale-[1.02] dark:hover:bg-white/20"}
+        ${draggedEventId === task.id ? "opacity-30" : ""}
+      `}
+      style={{ 
+        borderLeftColor: isCompact ? classColors[task.class] : undefined,
+        backgroundColor: isCompact ? `${classColors[task.class]}25` : undefined 
+      }}
+    >
       
       {!isCompact && (
           <div className="absolute left-1 top-3 bottom-3 w-1 rounded-full" style={{ backgroundColor: classColors[task.class] || "#cbd5e1" }} />
       )}
       
-    <div className={`flex items-center gap-2 justify-between ${!isCompact ? "pl-3" : ""}`}>
-      <div className="flex items-center gap-1.5 min-w-0">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleTask?.(e, task.id);
-          }}
-          aria-label={task.completed ? `Mark ${task.title} as incomplete` : `Mark ${task.title} as complete`}
-          className={`
-            w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 shrink-0
-            ${task.completed
-                ? "bg-[#34C759] border-[#34C759] text-white scale-100"
-                : "border-slate-300 dark:border-slate-500 hover:border-[#34C759] text-transparent scale-95 hover:scale-100"
-            }
-          `}
-        >
-          <Check className="w-3 h-3 stroke-[4]" />
-        </button>
-        <span className={`font-semibold truncate ${isCompact ? "text-slate-800 dark:text-slate-100" : "text-sm text-primary"} ${task.completed ? "line-through text-secondary" : ""}`}>
-          {task.title}
-        </span>
-      </div>
-      {task.priority === "High" && !task.completed && (
-        <Flag className="w-3 h-3 text-red-500 fill-red-500 shrink-0" />
-      )}
-    </div>
-    
-    {!isCompact && (
-      <div className="flex justify-between items-center mt-2 pl-3">
-        <div className="flex gap-2">
-           <span className="text-[10px] font-bold text-secondary uppercase tracking-wide opacity-80">{task.class}</span>
+      <div className={`flex items-center gap-2 justify-between ${!isCompact ? "pl-3" : ""}`}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleTask?.(e, task.id);
+            }}
+            aria-label={task.completed ? `Mark ${task.title} as incomplete` : `Mark ${task.title} as complete`}
+            className={`
+              w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 shrink-0
+              ${task.completed
+                  ? "success-check-on scale-100"
+                  : "success-check-off scale-95 hover:scale-100"
+              }
+            `}
+          >
+            <Check className="w-3 h-3 stroke-[4]" />
+          </button>
+          <span className={`font-semibold truncate ${isCompact ? "text-primary" : "text-sm text-primary"} ${task.completed ? "line-through text-secondary" : ""}`}>
+            {task.title}
+          </span>
         </div>
-        {task.time && (
-          <div className="text-[10px] text-secondary font-medium flex items-center gap-1 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">
-            <Clock className="w-3 h-3" /> {task.time}
-          </div>
+        {task.priority === "High" && !task.completed && (
+          <Flag className="w-3 h-3 text-red-500 fill-red-500 shrink-0" />
         )}
       </div>
-    )}
-  </div>
-);
+      
+      {!isCompact && (
+          <div className="flex justify-between items-center mt-2 pl-3">
+          <div className="flex gap-2">
+             <span className="text-[10px] font-bold text-secondary uppercase tracking-wide opacity-80">{task.class}</span>
+          </div>
+          {task.time && (
+            <div className="text-[10px] text-secondary font-medium flex items-center gap-1 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full border border-divider">
+              <Clock className="w-3 h-3" /> {task.time}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // PropTypes for CalendarTaskCard
 CalendarTaskCard.propTypes = {
@@ -211,7 +211,7 @@ const CalendarView = ({
     return (
       <div className="flex flex-col h-full w-full mac-glass rounded-[32px] overflow-hidden">
          
-         <div className="bg-white/40 dark:bg-black/20 border-b border-black/5 dark:border-white/5 shrink-0 p-4 pb-2 backdrop-blur-md">
+        <div className="bg-white/40 dark:bg-black/20 border-b border-divider shrink-0 p-4 pb-2 backdrop-blur-md">
             <div className="flex justify-between items-center mb-4">
                <span className="font-bold text-xl tracking-tight text-primary">{format(currentDate, "MMMM yyyy")}</span>
                <div className="flex gap-1">
@@ -242,7 +242,7 @@ const CalendarView = ({
                                 aria-current={isSel ? 'date' : undefined}
                                 className={`
                                     h-8 w-8 mx-auto rounded-full flex flex-col items-center justify-center text-sm relative transition-all duration-300
-                                    ${isSel ? "bg-[#007AFF] text-white shadow-lg shadow-blue-500/30 font-bold scale-110" : isTodayDay ? "text-[#007AFF] font-bold bg-blue-50 dark:bg-blue-900/20" : "text-primary hover:bg-black/5 dark:hover:bg-white/10"}
+                                    ${isSel ? "calendar-selected-accent font-bold scale-110" : isTodayDay ? "calendar-today-accent" : "text-primary hover:bg-black/5 dark:hover:bg-white/10"}
                                 `}
                            >
                                {format(day, "d")}
@@ -252,7 +252,7 @@ const CalendarView = ({
                    }
                    
                    return (
-                       <button key={day.toString()} onClick={() => setCurrentDate(day)} className={`snap-center min-w-[56px] flex flex-col items-center p-2 rounded-2xl border transition-all duration-300 ${isSel ? "bg-[#007AFF] text-white border-[#007AFF] shadow-lg shadow-blue-500/30 scale-105" : "bg-white/50 dark:bg-white/5 border-transparent text-secondary"}`}>
+                       <button key={day.toString()} onClick={() => setCurrentDate(day)} className={`snap-center min-w-[56px] flex flex-col items-center p-2 rounded-2xl border transition-all duration-300 ${isSel ? "calendar-selected-accent brand-accent-border scale-105" : "bg-white/50 dark:bg-white/5 border-transparent text-secondary"}`}>
                            <span className="text-[10px] font-bold uppercase opacity-80">{format(day, "EEE")}</span>
                            <span className="text-xl font-bold mt-1">{format(day, "d")}</span>
                            {hasEvent && <div className={`w-1 h-1 rounded-full mt-2 ${isSel ? "bg-white" : "bg-blue-500"}`} />}
@@ -303,7 +303,7 @@ const CalendarView = ({
                {calendarView === "agenda" ? "Upcoming Agenda" : format(currentDate, "MMMM yyyy")}
             </h2>
             {calendarView !== "agenda" && (
-            <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 rounded-full p-1 border border-black/5 dark:border-white/5 shadow-inner">
+            <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 rounded-full p-1 border border-divider shadow-inner">
                <Button variant="ghost" onClick={() => navigate("prev")} aria-label="Previous period" className="!rounded-full w-8 h-8 !p-0"><ChevronLeft className="w-5 h-5" /></Button>
                <Button variant="ghost" onClick={() => setCurrentDate(new Date())} aria-label="Go to today" className="px-4 font-semibold text-xs rounded-full">Today</Button>
                <Button variant="ghost" onClick={() => navigate("next")} aria-label="Next period" className="!rounded-full w-8 h-8 !p-0"><ChevronRight className="w-5 h-5" /></Button>
@@ -313,13 +313,13 @@ const CalendarView = ({
 
          
          <div className="flex-1 overflow-hidden p-6 pt-2">
-             <div className="w-full h-full bg-white/40 dark:bg-black/20 rounded-[24px] overflow-hidden flex flex-col border border-white/40 dark:border-white/5">
+             <div className="w-full h-full bg-white/40 dark:bg-black/20 rounded-[24px] overflow-hidden flex flex-col border border-divider">
             
                 
                 {calendarView === "month" && (
                 <div className="flex flex-col h-full w-full">
                     
-                    <div className="grid grid-cols-7 border-b border-black/5 dark:border-white/5 shrink-0 bg-white/30 dark:bg-white/5">
+                    <div className="grid grid-cols-7 border-b border-divider shrink-0 bg-white/30 dark:bg-white/5">
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName) => (
                             <div key={dayName} className="py-3 text-center text-xs font-bold uppercase text-secondary tracking-wider opacity-80">
                                 {dayName}
@@ -340,8 +340,8 @@ const CalendarView = ({
                             const isTodayDay = isToday(day);
                             
                             
-                            const borderRight = (idx + 1) % 7 !== 0 ? 'border-r border-black/5 dark:border-white/5' : '';
-                            const borderBottom = idx < days.length - 7 ? 'border-b border-black/5 dark:border-white/5' : '';
+                            const borderRight = (idx + 1) % 7 !== 0 ? 'border-r border-divider' : '';
+                            const borderBottom = idx < days.length - 7 ? 'border-b border-divider' : '';
                             
                             return (
                                 <div
@@ -360,7 +360,7 @@ const CalendarView = ({
                                         <span className={`
                                             text-xs font-bold w-8 h-8 flex items-center justify-center rounded-full transition-all
                                             ${isTodayDay 
-                                                ? "bg-[#007AFF] text-white shadow-lg shadow-blue-500/30 scale-110" 
+                                              ? "calendar-selected-accent scale-110" 
                                                 : isCurrentMonth ? "text-primary" : "text-secondary opacity-50"}
                                         `}>
                                             {format(day, "d")}
@@ -398,10 +398,10 @@ const CalendarView = ({
                         const dayEvents = eventsByDate[dayKey] || [];
 
                         return (
-                        <div key={day.toString()} className={`flex-1 min-w-[140px] flex flex-col h-full min-h-0 ${i !== 6 ? 'border-r border-black/5 dark:border-white/5' : ''}`}>
-                            <div className={`p-4 border-b border-black/5 dark:border-white/5 text-center shrink-0 ${isToday(day) ? "bg-blue-50/50 dark:bg-blue-900/10" : "bg-white/20 dark:bg-white/5"}`}>
-                                <div className={`text-xs font-bold uppercase mb-1 ${isToday(day) ? "text-[#007AFF]" : "text-secondary"}`}>{format(day, "EEE")}</div>
-                                <div className={`text-2xl font-bold ${isToday(day) ? "text-[#007AFF]" : "text-primary"}`}>{format(day, "d")}</div>
+                        <div key={day.toString()} className={`flex-1 min-w-[140px] flex flex-col h-full min-h-0 ${i !== 6 ? 'border-r border-divider' : ''}`}>
+                          <div className={`p-4 border-b border-divider text-center shrink-0 ${isToday(day) ? "bg-blue-50/50 dark:bg-blue-900/10" : "bg-white/20 dark:bg-white/5"}`}>
+                                <div className={`text-xs font-bold uppercase mb-1 ${isToday(day) ? "calendar-accent-text" : "text-secondary"}`}>{format(day, "EEE")}</div>
+                                <div className={`text-2xl font-bold ${isToday(day) ? "calendar-accent-text" : "text-primary"}`}>{format(day, "d")}</div>
                             </div>
                             <div className={`flex-1 p-2 space-y-2 overflow-y-auto custom-scrollbar ${isToday(day) ? "bg-blue-50/20" : ""}`}>
                                 {dayEvents.map(task => (
@@ -453,7 +453,7 @@ const CalendarView = ({
                                     
                                     
                                     <div className="relative flex flex-col items-center self-stretch hidden md:flex">
-                                        <div className="w-4 h-4 rounded-full border-[3px] border-[#F2F2F7] dark:border-[#1c1c1e] bg-[#007AFF] shadow-lg shadow-blue-500/30 z-10 mt-5 transition-transform group-hover:scale-125 duration-300" />
+                                        <div className="w-4 h-4 rounded-full border-[3px] calendar-timeline-dot z-10 mt-5 transition-transform group-hover:scale-125 duration-300" />
                                     </div>
 
                                     <div className="flex-1 pb-2">

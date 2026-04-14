@@ -1,6 +1,7 @@
 import { determineClass, determineType, normalizeEvent, validateEvent } from "./helpers";
 import { getApiBaseUrl, PALETTE } from "./constants";
 import logger from "./logger";
+import { format, parseISO } from "date-fns";
 
 /**
  * Fetch Remote ICS
@@ -26,6 +27,15 @@ export const fetchRemoteICS = async (url) => {
     logger.error("[ICS] Fetch Error:", error);
     throw error; 
   }
+};
+
+/**
+ * Format Date
+ * Replaces custom date formatting with date-fns
+ */
+export const formatDate = (dateString, formatString = "yyyy-MM-dd") => {
+  const date = parseISO(dateString);
+  return format(date, formatString);
 };
 
 /**

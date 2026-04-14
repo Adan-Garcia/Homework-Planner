@@ -334,8 +334,8 @@ const TaskModal = ({ requestDelete }) => {
           <div className="flex justify-between items-center">
             <span className={`text-xs ${
               formData.title.length > MAX_TASK_TITLE_LENGTH * 0.9 
-                ? 'text-red-500 font-semibold' 
-                : 'text-slate-500'
+                ? 'text-red-600 dark:text-red-400 font-semibold' 
+                : 'text-secondary'
             }`}>
               {formData.title.length}/{MAX_TASK_TITLE_LENGTH} characters
             </span>
@@ -364,7 +364,7 @@ const TaskModal = ({ requestDelete }) => {
                 <button
                   type="button"
                   onClick={handleAddNewClass}
-                  className="p-2.5 rounded-lg bg-[#007AFF] text-white hover:bg-[#0066DD] transition-colors"
+                  className="p-2.5 rounded-lg btn-primary transition-colors"
                   aria-label="Confirm new class"
                 >
                   <Plus className="w-4 h-4" />
@@ -430,9 +430,9 @@ const TaskModal = ({ requestDelete }) => {
                         id="allDay" 
                         checked={isAllDay} 
                         onChange={handleAllDayChange}
-                        className="w-3 h-3 accent-blue-600 rounded cursor-pointer"
+                    className="w-3 h-3 accent-[#007AFF] rounded cursor-pointer"
                     />
-                    <label htmlFor="allDay" className="text-[10px] font-bold text-blue-600 dark:text-blue-400 cursor-pointer">All Day</label>
+                  <label htmlFor="allDay" className="text-[10px] font-bold brand-accent-text cursor-pointer">All Day</label>
                  </div>
             </div>
             <div className="relative">
@@ -444,7 +444,7 @@ const TaskModal = ({ requestDelete }) => {
                     onChange={handleTimeChange}
                     className={`
                         w-full p-2.5 rounded-lg border-input surface-input text-input text-sm outline-none 
-                        ${isAllDay ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-800" : "focus:ring-2 focus:ring-blue-500/20"}
+                      ${isAllDay ? "opacity-50 cursor-not-allowed bg-black/5 dark:bg-white/5" : "focus:ring-2 focus:ring-blue-500/20"}
                     `}
                 />
             </div>
@@ -456,7 +456,7 @@ const TaskModal = ({ requestDelete }) => {
               value={formData.priority}
               onChange={handlePriorityChange}
               className={`w-full p-2.5 rounded-lg border-input surface-input text-sm outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                formData.priority === "High" ? "text-red-500 font-bold" : "text-input"
+                    formData.priority === "High" ? "text-red-600 dark:text-red-400 font-bold" : "text-input"
               }`}
             >
               <option value="Low">Low</option>
@@ -480,8 +480,8 @@ const TaskModal = ({ requestDelete }) => {
           <div className="flex justify-between items-center">
             <span className={`text-xs ${
               formData.description.length > MAX_TASK_DESCRIPTION_LENGTH * 0.9 
-                ? 'text-red-500 font-semibold' 
-                : 'text-slate-500'
+                ? 'text-red-600 dark:text-red-400 font-semibold' 
+                : 'text-secondary'
             }`}>
               {formData.description.length}/{MAX_TASK_DESCRIPTION_LENGTH} characters
             </span>
@@ -490,16 +490,16 @@ const TaskModal = ({ requestDelete }) => {
 
         {/* Recurrence Settings (Create Mode) */}
         {!editingTask ? (
-           <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-100 dark:border-slate-600/50 space-y-3">
+           <div className="status-info p-3 rounded-xl space-y-3">
                <div className="flex items-center gap-2">
-                   <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Recurrence</label>
+               <RefreshCw className="w-3.5 h-3.5 text-secondary" />
+               <label className="text-xs font-bold text-secondary uppercase tracking-wider">Recurrence</label>
                </div>
                <div className="grid grid-cols-2 gap-3">
                    <select
                         value={formData.recurrence}
                         onChange={handleRecurrenceChange}
-                        className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs dark:text-white outline-none"
+                 className="w-full p-2 rounded-lg surface-input text-input text-xs outline-none"
                    >
                        <option value="none">No Repeat</option>
                        <option value="weekly">Weekly</option>
@@ -510,38 +510,38 @@ const TaskModal = ({ requestDelete }) => {
                         value={formData.recurrenceEnd}
                         onChange={handleRecurrenceEndChange}
                         disabled={formData.recurrence === 'none'}
-                        className={`w-full p-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs dark:text-white outline-none ${formData.recurrence === 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                 className={`w-full p-2 rounded-lg surface-input text-input text-xs outline-none ${formData.recurrence === 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
                    />
                </div>
            </div>
         ) : (
             // Edit Scope (Edit Mode for Series)
             editingTask.groupId && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-100 dark:border-amber-900/30">
+            <div className="status-warning p-3 rounded-xl">
                     <div className="flex items-center gap-2 mb-2">
-                        <Layers className="w-3.5 h-3.5 text-amber-500" />
-                        <label className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Repeating Task</label>
+                <Layers className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <label className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">Repeating Task</label>
                     </div>
                     <div className="flex gap-4">
-                        <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-300 cursor-pointer">
+                <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer">
                             <input 
                                 type="radio" 
                                 name="editScope" 
                                 value="single" 
                                 checked={editScope === "single"}
                                 onChange={() => handleEditScopeChange("single")}
-                                className="accent-amber-500"
+                    className="accent-amber-500"
                             />
                             This Event Only
                         </label>
-                        <label className="flex items-center gap-2 text-xs font-medium dark:text-slate-300 cursor-pointer">
+                <label className="flex items-center gap-2 text-xs font-medium text-secondary cursor-pointer">
                             <input 
                                 type="radio" 
                                 name="editScope" 
                                 value="series" 
                                 checked={editScope === "series"}
                                 onChange={() => handleEditScopeChange("series")}
-                                className="accent-amber-500"
+                    className="accent-amber-500"
                             />
                             Entire Series
                         </label>

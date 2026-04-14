@@ -43,7 +43,7 @@ const ImportContent = ({ onOpenJsonEditor, onCloseModal, resetData, onExport }) 
         } else {
             alert(result.error || "Failed to import from URL");
         }
-    } catch(_e) {
+    } catch {
         alert("An error occurred during import.");
     } finally {
         setIsLoading(false);

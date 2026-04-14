@@ -1,5 +1,6 @@
 import { addDays, startOfWeek, format } from "date-fns";
 import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH } from "./constants";
+import { z } from "zod";
 
 export const unfoldLines = (text) => text.replace(/\r\n /g, "");
 
@@ -221,6 +222,328 @@ export const getContrastColor = (hexcolor) => {
   return luminance > 0.179 ? "#000000" : "#ffffff";
 };
 
+export const parseCssColor = (colorValue) => {
+  if (!colorValue || typeof colorValue !== "string") {
+    return null;
+  }
+
+  const normalized = colorValue.trim();
+
+  if (normalized.startsWith("#")) {
+    const hex = normalized.slice(1);
+    const expanded = hex.length === 3
+      ? hex.split("").map((char) => char + char).join("")
+      : hex;
+
+    if (expanded.length !== 6) return null;
+
+    const r = Number.parseInt(expanded.slice(0, 2), 16);
+    const g = Number.parseInt(expanded.slice(2, 4), 16);
+    const b = Number.parseInt(expanded.slice(4, 6), 16);
+
+    if ([r, g, b].some(Number.isNaN)) return null;
+    return { r, g, b, a: 1 };
+  }
+
+  const match = normalized.match(/rgba?\(([^)]+)\)/i);
+  if (!match) return null;
+
+  const parts = match[1].split(",").map((value) => value.trim());
+  if (parts.length < 3) return null;
+
+  const r = Number.parseFloat(parts[0]);
+  const g = Number.parseFloat(parts[1]);
+  const b = Number.parseFloat(parts[2]);
+  const a = parts.length >= 4 ? Number.parseFloat(parts[3]) : 1;
+
+  if ([r, g, b, a].some(Number.isNaN)) return null;
+
+  return { r, g, b, a };
+};
+
+export const mixCssColors = (foreground, background) => {
+  if (!foreground || !background) return null;
+
+  const alpha = foreground.a + background.a * (1 - foreground.a);
+  if (alpha === 0) {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+
+  return {
+    r: Math.round((foreground.r * foreground.a + background.r * background.a * (1 - foreground.a)) / alpha),
+    g: Math.round((foreground.g * foreground.a + background.g * background.a * (1 - foreground.a)) / alpha),
+    b: Math.round((foreground.b * foreground.a + background.b * background.a * (1 - foreground.a)) / alpha),
+    a: alpha,
+  };
+};
+
+export const relativeLuminance = (color) => {
+  if (!color) return 0;
+
+  const toLinear = (channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  };
+
+  return (
+    0.2126 * toLinear(color.r) +
+    0.7152 * toLinear(color.g) +
+    0.0722 * toLinear(color.b)
+  );
+};
+
+export const getContrastRatio = (foreground, background) => {
+  const fg = typeof foreground === "string" ? parseCssColor(foreground) : foreground;
+  const bg = typeof background === "string" ? parseCssColor(background) : background;
+
+  if (!fg || !bg) return 0;
+
+  const lighter = Math.max(relativeLuminance(fg), relativeLuminance(bg));
+  const darker = Math.min(relativeLuminance(fg), relativeLuminance(bg));
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+export const isReadableContrast = (foreground, background, minimumRatio = 4.5) => {
+  return getContrastRatio(foreground, background) >= minimumRatio;
+};
+
+const resolveBackgroundColor = (element) => {
+  if (typeof window === "undefined" || !element) return null;
+
+  const style = window.getComputedStyle(element);
+  const background = parseCssColor(style.backgroundColor);
+
+  if (background && background.a > 0) {
+    if (background.a >= 1) return background;
+
+    const parentBackground = resolveBackgroundColor(element.parentElement);
+    return parentBackground ? mixCssColors(background, parentBackground) : background;
+  }
+
+  return resolveBackgroundColor(element.parentElement) || parseCssColor(window.getComputedStyle(document.body).backgroundColor);
+};
+
+const getElementPath = (element) => {
+  if (!element || !element.tagName) return "";
+
+  const segments = [];
+  let current = element;
+
+  while (current && current.nodeType === 1 && current !== document.body) {
+    const tag = current.tagName.toLowerCase();
+    const className = typeof current.className === "string"
+      ? current.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".")
+      : "";
+    const segment = className ? `${tag}.${className}` : tag;
+    segments.unshift(segment);
+    current = current.parentElement;
+  }
+
+  return segments.join(" > ");
+};
+
+const isElementHidden = (element, style) => {
+  if (!element || !style) return true;
+  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+    return true;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return rect.width === 0 || rect.height === 0;
+};
+
+const getRequiredContrastRatio = (element, style) => {
+  const fontSize = Number.parseFloat(style.fontSize || "16");
+  const fontWeight = Number.parseInt(style.fontWeight || "400", 10);
+  const isLargeText = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700);
+
+  if (element.matches("input, textarea, select, option")) {
+    return 4.5;
+  }
+
+  return isLargeText ? 3 : 4.5;
+};
+
+const createContrastIssue = ({
+  element,
+  text,
+  ratio,
+  minimumRatio,
+  foreground,
+  background,
+  source,
+}) => ({
+  path: getElementPath(element),
+  tag: element.tagName.toLowerCase(),
+  source,
+  text: (text || "").trim().slice(0, 100),
+  ratio: Number(ratio.toFixed(2)),
+  minimumRatio,
+  foreground,
+  background,
+});
+
+export const auditFullUIContrast = ({ minimumRatio = 4.5 } = {}) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return { issues: [], checked: 0 };
+  }
+
+  const issues = [];
+  const checkedElements = new WeakMap();
+  const issueSignatures = new Set();
+
+  const isAuditPanelElement = (element) => {
+    return Boolean(element?.closest?.("[data-contrast-audit-panel='true']"));
+  };
+
+  const hasCheckedSource = (element, source) => {
+    const seenSources = checkedElements.get(element);
+    return Boolean(seenSources && seenSources.has(source));
+  };
+
+  const markCheckedSource = (element, source) => {
+    const seenSources = checkedElements.get(element) || new Set();
+    seenSources.add(source);
+    checkedElements.set(element, seenSources);
+  };
+
+  const inspectElementContrast = (element, source = "text") => {
+    if (!element || isAuditPanelElement(element) || hasCheckedSource(element, source)) return;
+
+    const style = window.getComputedStyle(element);
+    if (isElementHidden(element, style)) return;
+
+    const foreground = parseCssColor(style.color);
+    const backgroundColor = resolveBackgroundColor(element);
+    if (!foreground || !backgroundColor) return;
+
+    const ratio = getContrastRatio(foreground, backgroundColor);
+    const requiredRatio = Math.max(minimumRatio, getRequiredContrastRatio(element, style));
+
+    if (ratio < requiredRatio) {
+      const issue = createContrastIssue({
+        element,
+        text: source === "placeholder" ? element.getAttribute("placeholder") || "placeholder" : element.textContent,
+        ratio,
+        minimumRatio: requiredRatio,
+        foreground: style.color,
+        background: window.getComputedStyle(element.parentElement || document.body).backgroundColor,
+        source,
+      });
+
+      const signature = `${issue.path}|${issue.source}|${issue.text}|${issue.ratio}`;
+      if (!issueSignatures.has(signature)) {
+        issueSignatures.add(signature);
+        issues.push(issue);
+      }
+    }
+
+    markCheckedSource(element, source);
+  };
+
+  // Check rendered text nodes across the current UI screen.
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      if (!node || !node.nodeValue || !node.nodeValue.trim()) {
+        return NodeFilter.FILTER_REJECT;
+      }
+
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      if (isAuditPanelElement(parent)) return NodeFilter.FILTER_REJECT;
+      if (["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "PATH"].includes(parent.tagName)) {
+        return NodeFilter.FILTER_REJECT;
+      }
+
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  const textParents = new Set();
+  while (walker.nextNode()) {
+    textParents.add(walker.currentNode.parentElement);
+  }
+
+  textParents.forEach((element) => inspectElementContrast(element, "text"));
+
+  // Check input and control surfaces (including placeholder contrast).
+  const controls = document.querySelectorAll("input, textarea, select, button, [role='button'], a, label");
+  controls.forEach((element) => {
+    if (isAuditPanelElement(element)) return;
+    if (element.matches("input, textarea") && element.disabled) return;
+    inspectElementContrast(element, "control");
+
+    if (element.matches("input, textarea") && element.getAttribute("placeholder")) {
+      const placeholderStyle = window.getComputedStyle(element, "::placeholder");
+      const placeholderColor = parseCssColor(placeholderStyle.color) || parseCssColor(window.getComputedStyle(element).color);
+      const backgroundColor = resolveBackgroundColor(element);
+
+      if (placeholderColor && backgroundColor) {
+        const ratio = getContrastRatio(placeholderColor, backgroundColor);
+        if (ratio < 4.5) {
+          issues.push(createContrastIssue({
+            element,
+            text: element.getAttribute("placeholder"),
+            ratio,
+            minimumRatio: 4.5,
+            foreground: placeholderStyle.color,
+            background: window.getComputedStyle(element.parentElement || document.body).backgroundColor,
+            source: "placeholder",
+          }));
+        }
+      }
+    }
+  });
+
+  return {
+    checked: textParents.size + controls.length,
+    issues: issues.sort((a, b) => a.ratio - b.ratio),
+  };
+};
+
+export const auditContrastElements = ({
+  selectors = [".text-primary", ".text-secondary", ".text-heading", ".text-input", ".text-link-hover"],
+  minimumRatio = 4.5,
+} = {}) => {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return [];
+  }
+
+  const elements = new Set();
+  selectors.forEach((selector) => {
+    document.querySelectorAll(selector).forEach((element) => elements.add(element));
+  });
+
+  const issues = [];
+
+  elements.forEach((element) => {
+    const text = element.textContent?.trim();
+    if (!text) return;
+
+    const style = window.getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return;
+
+    const foreground = parseCssColor(style.color);
+    const background = resolveBackgroundColor(element);
+    if (!foreground || !background) return;
+
+    const ratio = getContrastRatio(foreground, background);
+    if (ratio < minimumRatio) {
+      issues.push({
+        selector: selectors.find((selector) => element.matches(selector)) || element.tagName.toLowerCase(),
+        text: text.slice(0, 80),
+        ratio: Number(ratio.toFixed(2)),
+        foreground: style.color,
+        background: window.getComputedStyle(element.parentElement || document.body).backgroundColor,
+      });
+    }
+  });
+
+  return issues.sort((a, b) => a.ratio - b.ratio);
+};
+
 
 export const compareTasks = (a, b) => {
   const dateDiff = new Date(a.date) - new Date(b.date);
@@ -371,4 +694,24 @@ export const sanitizeInput = (input) => {
     .replace(/on\w+\s*=\s*["']?[^"'\s>]*/gi, ''); // Removes onclick=, onerror=, etc.
   
   return withoutScripts;
+};
+
+/**
+ * Validation Schemas
+ * Implemented with Zod for data validation
+ */
+export const taskSchema = z.object({
+  title: z.string().min(1, "Title is required").max(MAX_TASK_TITLE_LENGTH, "Title is too long"),
+  description: z.string().max(MAX_TASK_DESCRIPTION_LENGTH, "Description is too long"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format"),
+  priority: z.enum(["Low", "Normal", "High"]),
+});
+
+export const validateTask = (task) => {
+  try {
+    taskSchema.parse(task);
+    return { valid: true, errors: null };
+  } catch (error) {
+    return { valid: false, errors: error.issues || error.errors || [error.message] };
+  }
 };

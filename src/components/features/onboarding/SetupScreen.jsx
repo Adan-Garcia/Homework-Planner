@@ -52,7 +52,7 @@ const SetupScreen = () => {
       const result = await processICSContent(text); 
       if (result.success) setView("planner");
       else setError(result.error);
-    } catch (_err) {
+    } catch {
       setError("Failed to read file.");
     }
   };
@@ -76,7 +76,7 @@ const SetupScreen = () => {
         const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("Primary proxy refused");
         text = await response.text();
-      } catch (_err) {
+      } catch {
         // Fallback Proxy
         const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(urlInput)}`);
         if (!response.ok) throw new Error("All proxies failed");
@@ -147,7 +147,7 @@ const SetupScreen = () => {
   };
 
   return (
-    <div className="h-screen w-full overflow-y-auto bg-[#F2F2F7] dark:bg-black transition-colors duration-500 relative font-sans selection:bg-blue-500/30">
+    <div className="h-screen w-full overflow-y-auto setup-screen-bg transition-colors duration-500 relative font-sans selection:bg-blue-500/30">
       
       {/* Background Ambience */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
@@ -161,7 +161,9 @@ const SetupScreen = () => {
         <div className="absolute top-6 right-6">
           <button
             onClick={() => setDarkMode(prev => !prev)}
-            className="p-3 rounded-full mac-glass hover:scale-110 transition-transform active:scale-95 text-secondary hover:text-primary"
+            aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            className="p-3 rounded-full mac-glass setup-icon-button-tone hover:scale-110 transition-transform active:scale-95"
           >
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
@@ -171,19 +173,19 @@ const SetupScreen = () => {
         <div className="max-w-5xl w-full my-auto flex flex-col items-center">
           
           <header className="text-center mb-16 animate-in slide-in-from-bottom-8 duration-700 fade-in">
-            <div className="bg-gradient-to-br from-[#007AFF] to-[#5856D6] w-20 h-20 rounded-[22px] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-500/30 ring-4 ring-white/20 dark:ring-white/10">
+            <div className="brand-gradient-bg w-20 h-20 rounded-[22px] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-blue-500/30 ring-4 ring-white/20 dark:ring-white/10">
               <CalendarIcon className="w-10 h-10 text-white" />
             </div>
             <h1 className="text-5xl font-bold text-primary mb-4 tracking-tight">
               Homework Planner
             </h1>
-            <p className="text-secondary text-xl max-w-lg mx-auto leading-relaxed opacity-80">
+            <p className="setup-copy-muted text-xl max-w-lg mx-auto leading-relaxed">
               Your personal schedule, encrypted and synced across all your devices.
             </p>
           </header>
 
           {(error || authError) && (
-            <div className="mb-8 mac-glass bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400 px-6 py-4 rounded-2xl flex items-center gap-3 w-full max-w-md animate-in slide-in-from-top-4 fade-in">
+            <div className="mb-8 status-error px-6 py-4 rounded-2xl w-full max-w-md animate-in slide-in-from-top-4 fade-in">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <p className="text-sm font-bold">{error || authError}</p>
             </div>
@@ -193,11 +195,11 @@ const SetupScreen = () => {
             
             {/* Option 1: Sync */}
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
-              <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-[#007AFF] mb-6">
+              <div className="w-12 h-12 rounded-2xl brand-accent-soft-bg flex items-center justify-center brand-accent-text mb-6">
                 <Smartphone className="w-6 h-6" />
               </div>
               <h3 className="font-bold text-xl text-primary mb-2">Sync Devices</h3>
-              <p className="text-sm text-secondary mb-8 leading-relaxed">
+              <p className="text-sm setup-copy-muted mb-8 leading-relaxed">
                 Connect to an existing room or create a private sync bridge.
               </p>
               
@@ -207,7 +209,7 @@ const SetupScreen = () => {
                   placeholder="ROOM CODE"
                   value={roomInput}
                   onChange={(e) => setRoomInput(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-3 text-sm mac-input-glass rounded-xl text-primary font-bold uppercase placeholder:font-normal placeholder:text-secondary/50 outline-none focus:ring-2 focus:ring-[#007AFF]/50"
+                  className="w-full px-4 py-3 text-sm mac-input-glass rounded-xl text-primary font-bold uppercase placeholder:font-normal placeholder:text-secondary/50 outline-none brand-accent-focus"
                 />
                 <div className="relative">
                   <input
@@ -215,7 +217,7 @@ const SetupScreen = () => {
                     placeholder="Secret Password"
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    className="w-full px-4 py-3 pl-10 text-sm mac-input-glass rounded-xl text-primary placeholder:text-secondary/50 outline-none focus:ring-2 focus:ring-[#007AFF]/50"
+                    className="w-full px-4 py-3 pl-10 text-sm mac-input-glass rounded-xl text-primary placeholder:text-secondary/50 outline-none brand-accent-focus"
                   />
                   <Lock className="w-4 h-4 text-secondary/50 absolute left-3.5 top-3.5" />
                 </div>
@@ -224,7 +226,7 @@ const SetupScreen = () => {
                     type="submit"
                     onClick={handleConnect}
                     disabled={isAuthorizing}
-                    className="bg-[#007AFF] text-white py-3 rounded-xl text-sm font-bold hover:bg-[#0062CC] shadow-lg shadow-blue-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="setup-primary-cta brand-accent-button-strong py-3 rounded-xl text-sm font-bold transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isAuthorizing ? (
                       <>
@@ -239,7 +241,7 @@ const SetupScreen = () => {
                     type="submit"
                     onClick={handleCreateNew}
                     disabled={isAuthorizing}
-                    className="bg-black/5 dark:bg-white/10 text-primary py-3 rounded-xl text-sm font-bold hover:bg-black/10 dark:hover:bg-white/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="btn-secondary py-3 rounded-xl text-sm font-bold hover:scale-[1.01] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isAuthorizing ? (
                       <>
@@ -256,20 +258,20 @@ const SetupScreen = () => {
 
             {/* Option 2: Import */}
             <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300">
-              <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 mb-6">
+              <div className="w-12 h-12 rounded-2xl brand-accent-soft-bg brand-accent-text flex items-center justify-center mb-6">
                 <Upload className="w-6 h-6" />
               </div>
               <h3 className="font-bold text-xl text-primary mb-2">Import Data</h3>
-              <p className="text-sm text-secondary mb-8 leading-relaxed">
+              <p className="text-sm setup-copy-muted mb-8 leading-relaxed">
                 Import from Canvas, Google Calendar, or a backup file.
               </p>
 
               <div className="space-y-6 mt-auto">
                 <label className="block w-full group cursor-pointer">
-                  <span className="text-xs font-bold uppercase text-secondary/70 mb-2 block tracking-wider">Upload .ics file</span>
+                  <span className="text-xs font-bold uppercase setup-label-strong mb-2 block tracking-wider">Upload .ics file</span>
                   <div className="mac-input-glass rounded-xl p-3 flex items-center justify-between group-hover:bg-white/50 dark:group-hover:bg-white/20 transition-colors">
-                     <span className="text-xs text-secondary italic pl-1">Select file...</span>
-                     <Upload className="w-4 h-4 text-purple-500" />
+                    <span className="text-xs setup-copy-muted italic pl-1">Select file...</span>
+                     <Upload className="w-4 h-4 brand-accent-text" />
                   </div>
                   <input
                     type="file"
@@ -280,7 +282,7 @@ const SetupScreen = () => {
                 </label>
 
                 <div>
-                  <span className="text-xs font-bold uppercase text-secondary/70 mb-2 block tracking-wider">Fetch from URL</span>
+                  <span className="text-xs font-bold uppercase setup-label-strong mb-2 block tracking-wider">Fetch from URL</span>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -292,7 +294,9 @@ const SetupScreen = () => {
                     <button
                       onClick={handleUrlFetch}
                       disabled={isLoading || !urlInput}
-                      className="bg-purple-600 text-white w-10 flex items-center justify-center rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-purple-500/30"
+                      aria-label="Import calendar from URL"
+                      title="Import calendar from URL"
+                      className="btn-primary w-10 flex items-center justify-center rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-blue-500/30"
                     >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                     </button>
@@ -302,12 +306,12 @@ const SetupScreen = () => {
             </div>
 
             {/* Option 3: Empty */}
-            <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300 border-dashed border-2 !border-black/5 dark:!border-white/10">
-              <div className="w-12 h-12 rounded-2xl bg-slate-500/10 flex items-center justify-center text-slate-500 mb-6">
+            <div className="mac-glass p-8 flex flex-col h-full rounded-[32px] hover:scale-[1.02] transition-transform duration-300 border-dashed border-2 border-base">
+              <div className="w-12 h-12 rounded-2xl brand-accent-soft-bg brand-accent-text flex items-center justify-center mb-6">
                 <Plus className="w-6 h-6" />
               </div>
               <h3 className="font-bold text-xl text-primary mb-2">Start Fresh</h3>
-              <p className="text-sm text-secondary mb-8 leading-relaxed">
+              <p className="text-sm setup-copy-muted mb-8 leading-relaxed">
                 Begin with a clean slate and add your tasks manually.
               </p>
 
@@ -331,8 +335,8 @@ const SetupScreen = () => {
             </div>
           </div>
 
-          <footer className="mt-16 text-center opacity-60">
-            <p className="text-[10px] uppercase tracking-widest text-secondary flex items-center justify-center gap-2">
+          <footer className="mt-16 text-center">
+            <p className="text-[10px] uppercase tracking-widest setup-copy-muted flex items-center justify-center gap-2">
               <Lock className="w-3 h-3" /> Zero-Knowledge Architecture
             </p>
           </footer>

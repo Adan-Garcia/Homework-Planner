@@ -58,13 +58,13 @@ const ClassRow = ({ cls, color, onColorChange, onDelete, onRename }) => {
             />
             <button
               onClick={handleSaveEdit}
-              className="p-1 text-green-600 hover:bg-green-50 rounded dark:hover:bg-green-900/30"
+              className="p-1 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded"
             >
               <Check className="icon-xs" />
             </button>
             <button
               onClick={handleCancelEdit}
-              className="p-1 text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/30"
+              className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
             >
               <X className="icon-xs" />
             </button>

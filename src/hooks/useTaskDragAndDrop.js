@@ -1,24 +1,24 @@
 import { useState } from "react";
 import { useData } from "../context/DataContext";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 
+/**
+ * useTaskDragAndDrop Hook
+ * Refactored with dndkit for drag-and-drop functionality
+ */
 export const useTaskDragAndDrop = () => {
   const { events, updateEvent } = useData();
   const [draggedEventId, setDraggedEventId] = useState(null);
 
-  const handleDragStart = (e, id) => {
-    e.dataTransfer.setData("text/plain", id);
-    e.dataTransfer.effectAllowed = "move";
-    setDraggedEventId(id);
-  };
+  const { attributes, listeners, setNodeRef: setDraggableRef } = useDraggable({
+    id: draggedEventId,
+  });
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
+  const { setNodeRef: setDroppableRef } = useDroppable({
+    id: "droppable-area",
+  });
 
-  const handleDrop = (e, targetDate) => {
-    e.preventDefault();
-    const id = e.dataTransfer.getData("text/plain");
+  const handleDrop = (id, targetDate) => {
     if (!id || !targetDate) return;
 
     const ev = events.find((e) => e.id === id);
@@ -28,30 +28,11 @@ export const useTaskDragAndDrop = () => {
     setDraggedEventId(null);
   };
 
-  const handleSidebarDrop = (e, targetGroup) => {
-    e.preventDefault();
-    const id = e.dataTransfer.getData("text/plain");
-    
-    let targetDate = new Date();
-    if (targetGroup === "tomorrow") {
-      targetDate.setDate(targetDate.getDate() + 1);
-    }
-    
-    
-    const dateStr = targetDate.toISOString().split("T")[0];
-    
-    const ev = events.find((e) => e.id === id);
-    if (ev) {
-      updateEvent({ ...ev, date: dateStr });
-    }
-    setDraggedEventId(null);
-  };
-
   return {
-    draggedEventId,
-    handleDragStart,
-    handleDragOver,
+    setDraggableRef,
+    setDroppableRef,
+    attributes,
+    listeners,
     handleDrop,
-    handleSidebarDrop,
   };
 };

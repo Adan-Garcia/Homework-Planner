@@ -64,8 +64,8 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
         className={`
           mt-0.5 w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 shrink-0
           ${task.completed
-              ? "bg-[#34C759] border-[#34C759] text-white scale-100 rotate-0"
-              : "border-slate-300 dark:border-slate-500 hover:border-[#34C759] text-transparent scale-95 group-hover:scale-100"
+              ? "success-check-on scale-100 rotate-0"
+              : "success-check-off scale-95 group-hover:scale-100"
           }
         `}
       >
@@ -93,11 +93,11 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
         </p>
         
         <div className="flex items-center gap-2 mt-2">
-           <span className="text-[10px] text-secondary font-medium px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5">
+           <span className="text-[10px] text-secondary font-medium px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/5 border border-divider">
              {task.type}
            </span>
            {task.priority === "High" && !task.completed && (
-             <span className="text-[10px] text-red-600 bg-red-100/50 dark:bg-red-500/20 px-2 py-0.5 rounded-full font-bold">
+             <span className="text-[10px] text-red-600 dark:text-red-400 bg-red-100/50 dark:bg-red-500/20 px-2 py-0.5 rounded-full font-bold">
                 High
              </span>
            )}
@@ -106,7 +106,7 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
       
       {!task.completed && (
         <div 
-          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-slate-300 cursor-grab active:cursor-grabbing md:block hidden p-2"
+          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-secondary cursor-grab active:cursor-grabbing md:block hidden p-2"
           aria-label="Drag to reschedule"
           role="img"
         >
@@ -121,15 +121,16 @@ const TaskItem = ({ task, toggleTask, openEditTaskModal, classColors }) => {
 const DropZone = ({ 
   title, 
   groupKey, 
-  icon: Icon, 
+  icon,
   items = [], 
   isDanger, 
-  accentColor = "text-slate-500",
+  accentColor = "text-secondary",
   toggleTask,
   openEditTaskModal,
   classColors
 }) => {
   // Icon is used in JSX below
+  const SectionIcon = icon;
   const { draggedEventId, handleDragOver, handleSidebarDrop } = useDragDrop();
   const [isOpen, setIsOpen] = useState(true);
 
@@ -152,15 +153,15 @@ const DropZone = ({
         `}
       >
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-          <Icon className={`w-4 h-4 ${isDanger ? "text-red-500" : accentColor}`} />
+          <SectionIcon className={`w-4 h-4 ${isDanger ? "text-red-500" : accentColor}`} />
           {title}
         </div>
         <div className="flex items-center gap-2">
             <span className={`
                 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-colors
                 ${isDanger 
-                    ? "bg-red-500/10 text-red-600" 
-                    : "bg-black/5 dark:bg-white/10 text-secondary"
+                  ? "status-error !py-0.5 !px-2.5 !rounded-full !shadow-none text-[10px]" 
+                  : "bg-black/5 dark:bg-white/10 text-secondary"
                 }
             `}>
                 {items ? items.length : 0}
@@ -187,7 +188,7 @@ const DropZone = ({
           />
         ))}
         {(!items || items.length === 0) && isOpen && (
-          <div className="text-center py-4 text-xs text-slate-300 dark:text-slate-600 italic">
+          <div className="text-center py-4 text-xs text-secondary/50 italic">
             No tasks
           </div>
         )}
@@ -248,7 +249,7 @@ const Sidebar = ({
       setInlineClassName("");
       return;
     }
-    if (!/^[\w\s\-]{2,64}$/.test(name)) return;
+    if (!/^[\w\s-]{2,64}$/.test(name)) return;
     const colorIndex = Object.keys(classColors).length;
     const newColor = PALETTE[colorIndex % PALETTE.length];
     setClassColorsCtx({ ...classColors, [name]: newColor });
@@ -269,7 +270,7 @@ const Sidebar = ({
       let taskDate;
       try {
         taskDate = parseISO(task.date);
-      } catch (e) {
+      } catch {
         return;
       }
       
@@ -363,14 +364,14 @@ const Sidebar = ({
             <Button
               onClick={() => setShowCompleted(!showCompleted)}
               variant="ghost"
-              className={`!px-4 !py-1.5 border border-transparent !rounded-xl ${showCompleted ? "bg-[#34C759]/10 text-[#34C759]" : "text-secondary bg-black/5 dark:bg-white/5"}`}
+              className={`!px-4 !py-1.5 border border-transparent !rounded-xl ${showCompleted ? "success-pill-active" : "text-secondary bg-black/5 dark:bg-white/5"}`}
             >
               Done
             </Button>
           </div>
 
           {/* Class Filter Pills */}
-          <div className="pt-2 border-t border-black/5 dark:border-white/5 pointer-events-auto">
+          <div className="pt-2 border-t border-divider pointer-events-auto">
             <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar pointer-events-auto">
               <button
                 type="button"
@@ -382,8 +383,8 @@ const Sidebar = ({
                 title="Show all classes"
                 className={`pointer-events-auto cursor-pointer text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all whitespace-nowrap ${
                   hiddenClasses.length === 0 
-                    ? "bg-slate-800 text-white dark:bg-white dark:text-slate-900 shadow-sm" 
-                    : "bg-white/50 dark:bg-white/5 text-secondary border border-black/5 dark:border-white/5 hover:bg-white hover:text-slate-900 dark:hover:bg-white/20 dark:hover:text-slate-900"
+                    ? "brand-gradient-bg text-white shadow-sm" 
+                    : "bg-white/50 dark:bg-white/5 text-secondary border border-divider hover:bg-white hover:text-slate-900 dark:hover:bg-white/20 dark:hover:text-slate-900"
                 }`}
               >
                 All
@@ -406,7 +407,7 @@ const Sidebar = ({
                     pointer-events-auto text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer
                     ${hiddenClasses.includes(cls) 
                         ? "opacity-50 grayscale bg-transparent border border-transparent text-secondary hover:opacity-70" 
-                        : "bg-white/50 dark:bg-white/5 border border-black/5 dark:border-white/5 shadow-sm hover:bg-white hover:text-slate-900 dark:hover:bg-white/20 dark:hover:text-slate-900"
+                        : "bg-white/50 dark:bg-white/5 border border-divider shadow-sm hover:bg-white hover:text-slate-900 dark:hover:bg-white/20 dark:hover:text-slate-900"
                     }
                   `}
                 >
@@ -446,7 +447,7 @@ const Sidebar = ({
                   <button
                     type="button"
                     onClick={handleInlineAddClass}
-                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-[#007AFF] text-white hover:bg-[#0066DD] transition-colors"
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg brand-accent-button transition-colors"
                     aria-label="Confirm new class"
                   >
                     <Check className="w-3 h-3" />
@@ -470,7 +471,7 @@ const Sidebar = ({
                     setTimeout(() => inlineClassInputRef.current?.focus(), 50);
                   }}
                   title="Add a new class"
-                  className="pointer-events-auto cursor-pointer text-[10px] font-bold px-2 py-1 rounded-lg transition-all whitespace-nowrap bg-white/50 dark:bg-white/5 border border-dashed border-black/10 dark:border-white/10 text-secondary hover:bg-white hover:text-[#007AFF] hover:border-[#007AFF]/30 dark:hover:bg-white/10 dark:hover:text-blue-400 flex items-center gap-1"
+                  className="pointer-events-auto cursor-pointer text-[10px] font-bold px-2 py-1 rounded-lg transition-all whitespace-nowrap bg-white/50 dark:bg-white/5 border border-dashed border-black/10 dark:border-white/10 text-secondary hover:bg-white dark:hover:bg-white/10 brand-accent-hover flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" />
                   Add

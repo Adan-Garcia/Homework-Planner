@@ -1,15 +1,16 @@
 import React from "react";
 import PropTypes from "prop-types";
+import { Card as ShadcnCard } from "@shadcn/ui";
 
+/**
+ * Card Component
+ * Replaced with shadcn/ui Card for consistency and accessibility
+ */
 const Card = ({ children, className = "", hoverable = false, ...props }) => {
-  const baseClass = hoverable ? "surface-card-hover" : "surface-card";
   return (
-    <div 
-      className={`${baseClass} border-base rounded-xl ${className}`} 
-      {...props}
-    >
+    <ShadcnCard className={`${hoverable ? "hoverable" : ""} ${className}`} {...props}>
       {children}
-    </div>
+    </ShadcnCard>
   );
 };
 

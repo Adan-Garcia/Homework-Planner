@@ -74,10 +74,10 @@ const MainLayout = ({ children }) => {
 
             {/* App Logo/Title */}
             <div className="flex items-center gap-2.5">
-              <div className="bg-gradient-to-br from-[#007AFF] to-[#5856D6] p-1.5 rounded-lg shadow-lg shadow-blue-500/20 hidden xs:flex">
+              <div className="brand-gradient-bg p-1.5 rounded-lg shadow-lg shadow-blue-500/20 hidden xs:flex">
                 <CalendarIcon className="w-4 h-4 text-white" />
               </div>
-              <h1 className="font-bold text-lg hidden md:block tracking-tight text-slate-800 dark:text-white">
+              <h1 className="font-bold text-lg hidden md:block tracking-tight text-primary">
                 Planner
               </h1>
             </div>
@@ -98,7 +98,7 @@ const MainLayout = ({ children }) => {
                   aria-label={`Switch to ${v.label} view`}
                   aria-pressed={calendarView === v.id}
                 >
-                  <v.icon className={`w-4 h-4 sm:mr-1.5 ${calendarView === v.id ? "text-[#007AFF] dark:text-white" : "opacity-60"}`} />
+                  <v.icon className={`w-4 h-4 sm:mr-1.5 ${calendarView === v.id ? "brand-accent-text" : "opacity-60"}`} />
                   <span className="hidden sm:inline truncate">{v.label}</span>
                 </button>
               ))}
@@ -107,7 +107,7 @@ const MainLayout = ({ children }) => {
 
           {/* Right: Actions (Theme, Settings, New Task) */}
           <div className="flex items-center justify-end gap-1.5 w-auto min-w-fit pr-1">
-            <div className="flex items-center gap-1 border-r border-black/10 dark:border-white/10 pr-1.5 mr-0.5">
+            <div className="flex items-center gap-1 border-r border-divider pr-1.5 mr-0.5">
               <Button
                 variant="ghost"
                 onClick={() => setDarkMode(prev => !prev)}

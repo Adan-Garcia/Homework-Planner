@@ -1,13 +1,13 @@
 import React, {
-  createContext,
   useContext,
   useState,
   useEffect,
   useMemo,
-  useCallback,
+  useCallback,createContext
 } from "react";
 import { useRoomAuth } from "../hooks/useRoomAuth";
 import logger from "../utils/logger";
+import { create } from "zustand";
 
 const AuthContext = createContext();
 
@@ -85,3 +85,14 @@ export const AuthProvider = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+/**
+ * Auth Store
+ * Refactored with zustand for state management
+ */
+export const useAuthStore = create((set) => ({
+  roomId: null,
+  roomPassword: "",
+  setRoomId: (roomId) => set({ roomId }),
+  setRoomPassword: (roomPassword) => set({ roomPassword }),
+}));

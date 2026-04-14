@@ -1,4 +1,5 @@
 import React from "react";
+import { OverlayProvider } from "@react-aria/overlays";
 import { useUI, UIProvider } from "./context/PlannerContext";
 import { useData, DataProvider } from "./context/DataContext";
 import { AuthProvider } from "./context/AuthContext";
@@ -15,8 +16,10 @@ import ModalManager from "./components/managers/ModalManager";
 import ErrorBoundary from "./components/ui/ErrorBoundary";
 import FeatureErrorBoundary from "./components/ui/FeatureErrorBoundary";
 
+
 import { useFilteredEvents } from "./hooks/useFilteredEvents";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+
 import { initWebVitals } from "./utils/webVitals";
 import { useEffect } from "react";
 
@@ -123,17 +126,19 @@ function PlannerApp() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <NotificationProvider>
-        <AuthProvider>
-          <DataProvider>
-            <UIProvider>
-              <DragDropProvider>
-                <PlannerApp />
-              </DragDropProvider>
-            </UIProvider>
-          </DataProvider>
-        </AuthProvider>
-      </NotificationProvider>
+      <OverlayProvider>
+        <NotificationProvider>
+          <AuthProvider>
+            <DataProvider>
+              <UIProvider>
+                <DragDropProvider>
+                  <PlannerApp />
+                </DragDropProvider>
+              </UIProvider>
+            </DataProvider>
+          </AuthProvider>
+        </NotificationProvider>
+      </OverlayProvider>
     </ErrorBoundary>
   );
 }

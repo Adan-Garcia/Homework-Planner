@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react"; 
+import React, { useEffect, useState, useContext, useCallback, useMemo, createContext } from "react";
 import { STORAGE_KEYS } from "../utils/constants.js";
 import logger from "../utils/logger.js";
+import { create } from "zustand";
 
 const UIContext = createContext();
 
@@ -147,3 +148,18 @@ export const UIProvider = ({ children }) => {
     </UIContext.Provider>
   );
 };
+
+/**
+ * Planner Store
+ * Refactored with zustand for state management
+ */
+export const usePlannerStore = create((set) => ({
+  darkMode: false,
+  viewMode: "calendar",
+  modals: {},
+  selectedDate: null,
+  setDarkMode: (darkMode) => set({ darkMode }),
+  setViewMode: (viewMode) => set({ viewMode }),
+  setModals: (modals) => set({ modals }),
+  setSelectedDate: (selectedDate) => set({ selectedDate }),
+}));
